@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="配車CAL">
+<meta name="theme-color" content="#0d1117">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>配車カレンダー</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--panel:#161b22;--card:#1c2330;--border:#30363d;
+  --accent:#f0b429;--text:#e6edf3;--text-sub:#8b949e;
+  --green:#3fb950;--red:#f85149;--blue:#58a6ff;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Noto Sans JP',sans-serif;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;}
+input,button,select{font-family:'Noto Sans JP',sans-serif;-webkit-appearance:none;appearance:none;}
+select{background-image:none}
+
+/* ===== SETUP SCREEN ===== */
+.setup{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;gap:22px;z-index:900}
+.setup.hidden{display:none}
+.setup-logo{font-size:60px;animation:bounce 2s infinite}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.setup-title{font-family:'Oswald',sans-serif;font-size:26px;font-weight:700;color:var(--accent);letter-spacing:3px;text-align:center}
+.setup-sub{font-size:13px;color:var(--text-sub);text-align:center;line-height:1.75}
+.setup-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;display:flex;flex-direction:column;gap:10px}
+.setup-lbl{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--text-sub);text-transform:uppercase}
+.setup-inp{width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:13px 12px;color:var(--text);font-size:15px;outline:none}
+.setup-inp:focus{border-color:var(--accent)}
+.setup-hint{font-size:11px;color:var(--text-sub);line-height:1.7}
+.setup-hint a{color:var(--blue);text-decoration:none}
+.btn-start{width:100%;padding:15px;background:var(--accent);color:#000;border:none;border-radius:11px;font-family:'Oswald',sans-serif;font-size:17px;font-weight:700;letter-spacing:2px;cursor:pointer}
+.btn-start:active{opacity:0.8}
+
+/* ===== MAIN SCREEN ===== */
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg)}
+.screen.hidden{display:none}
+.header{background:var(--panel);border-bottom:2px solid var(--accent);padding-top:var(--safe-top);height:calc(52px + var(--safe-top));display:flex;align-items:flex-end;padding-bottom:10px;padding-left:16px;padding-right:16px;gap:10px;flex-shrink:0;}
+.header-title{font-family:'Oswald',sans-serif;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent)}
+.ai-badge{margin-left:auto;background:rgba(240,180,41,0.12);border:1px solid rgba(240,180,41,0.35);border-radius:20px;padding:3px 9px;font-size:10px;color:var(--accent);font-weight:700}
+
+.tab-content{flex:1;overflow:hidden;position:relative;min-height:0}
+.tab-pane{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}
+.tab-pane.hidden{display:none}
+.tab-bar{display:flex;background:var(--panel);border-top:1px solid var(--border);padding-bottom:var(--safe-bot);flex-shrink:0;}
+.tab-btn{flex:1;padding:10px 0 8px;background:none;border:none;color:var(--text-sub);font-size:10px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+.tab-btn .ti{font-size:22px;line-height:1}
+.tab-btn.active{color:var(--accent)}
+
+/* ===== SCAN ===== */
+.scan-pane{padding:14px;display:flex;flex-direction:column;gap:12px}
+.img-zone{background:var(--panel);border:2px dashed var(--border);border-radius:12px;min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;overflow:hidden;transition:border-color 0.2s;}
+.img-zone.has-img{border-style:solid;border-color:var(--border)}
+.placeholder{display:flex;flex-direction:column;align-items:center;gap:6px;padding:24px;text-align:center;pointer-events:none}
+.preview{width:100%;max-height:220px;object-fit:contain;display:block}
+
+/* 解析中オーバーレイ */
+.analyzing{display:none;position:absolute;inset:0;background:rgba(13,17,23,0.88);flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.analyzing.show{display:flex}
+.analyzing-txt{font-size:13px;color:var(--text-sub)}
+.spin-lg{width:36px;height:36px;border:3px solid rgba(240,180,41,0.2);border-top-color:var(--accent);border-radius:50%;animation:sp 0.8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+.btn-row{display:flex;gap:10px}
+.btn-h{flex:1;padding:13px 0;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-h.pri{background:var(--accent);color:#000}
+.btn-h.sec{background:var(--panel);color:var(--text);border:1px solid var(--border)}
+.btn-h:active{opacity:0.75}
+
+.btn-analyze{width:100%;padding:14px;background:var(--accent);color:#000;border:none;border-radius:10px;font-family:'Oswald',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;}
+.btn-analyze:disabled{background:#252525;color:var(--text-sub);cursor:not-allowed}
+.btn-analyze:not(:disabled):active{opacity:0.8}
+.spin-sm{width:18px;height:18px;border:2px solid rgba(0,0,0,0.2);border-top-color:#000;border-radius:50%;animation:sp 0.7s linear infinite;flex-shrink:0}
+
+/* 結果フォーム */
+.res-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.res-sec{border-bottom:1px solid var(--border)}
+.res-sec:last-child{border-bottom:none}
+.res-hd{padding:8px 14px;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;display:flex;align-items:center;gap:6px}
+.res-hd.ld{background:rgba(63,185,80,0.12);color:var(--green)}
+.res-hd.ul{background:rgba(248,81,73,0.12);color:var(--red)}
+.res-fld{padding:9px 14px;border-top:1px solid var(--border)}
+.res-fld:first-of-type{border-top:none}
+.fld-lbl{font-size:10px;color:var(--text-sub);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px}
+.dt-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.fi{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:9px 10px;color:var(--text);font-size:14px;outline:none}
+.fi:focus{border-color:var(--accent)}
+.fi.fd{flex:1;min-width:128px}
+.fi.ft{width:88px}
+.fi.fa{width:74px;cursor:pointer}
+.fi-full{width:100%;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:9px 10px;color:var(--text);font-size:14px;outline:none}
+.fi-full:focus{border-color:var(--accent)}
+.fld-hint{font-size:11px;color:var(--text-sub);margin-top:4px}
+
+#resultArea{display:none;flex-direction:column;gap:12px}
+.btn-reg{width:100%;padding:14px;background:var(--green);color:#000;border:none;border-radius:10px;font-family:'Oswald',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer}
+.btn-reg:active{opacity:0.8}
+.btn-can{width:100%;padding:10px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text-sub);font-size:14px;cursor:pointer}
+
+/* ===== CALENDAR ===== */
+.cal-pane{padding:12px}
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.cal-lbl{font-family:'Oswald',sans-serif;font-size:22px;font-weight:700;letter-spacing:2px}
+.cal-arr{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;width:38px;height:38px;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.cal-stats{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.chip{background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:11px;display:flex;align-items:center;gap:5px}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.wdays{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:4px}
+.wd{text-align:center;font-size:11px;font-weight:700;color:var(--text-sub);padding:4px 0}
+.wd.su{color:var(--red)}.wd.sa{color:var(--blue)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.dcell{background:var(--panel);border:1px solid var(--border);border-radius:8px;min-height:54px;padding:5px 4px;cursor:pointer;transition:border-color 0.15s}
+.dcell:active{border-color:var(--accent)}
+.dcell.other{opacity:0.22}
+.dcell.today{border-color:var(--accent)}
+.dcell.today .dnum{color:var(--accent);font-weight:700}
+.dcell.sun .dnum{color:var(--red)}
+.dcell.sat .dnum{color:var(--blue)}
+.dnum{font-family:'Oswald',sans-serif;font-size:13px;margin-bottom:3px;text-align:center}
+.ddots{display:flex;flex-wrap:wrap;gap:3px;justify-content:center}
+.ddot{width:7px;height:7px;border-radius:50%}
+.ddot.load{background:var(--green)}
+.ddot.unload{background:var(--red)}
+
+/* ===== MODAL ===== */
+.m-ov{position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:500;display:flex;align-items:flex-end;backdrop-filter:blur(4px);padding-bottom:var(--safe-bot)}
+.m-ov.hidden{display:none}
+.m-box{background:var(--panel);border-radius:16px 16px 0 0;width:100%;max-height:80vh;overflow-y:auto;animation:su 0.25s ease}
+@keyframes su{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.m-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:12px auto 0}
+.m-hd{padding:14px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.m-title{font-family:'Oswald',sans-serif;font-size:17px;font-weight:600;letter-spacing:1px}
+.m-body{padding:16px 20px;display:flex;flex-direction:column;gap:12px}
+.m-foot{padding:12px 20px 20px;display:flex;gap:8px}
+.btn-mdel{flex:1;padding:12px;background:rgba(248,81,73,0.12);color:var(--red);border:1px solid var(--red);border-radius:8px;font-size:14px;font-weight:700;cursor:pointer}
+.btn-mcl{flex:1;padding:12px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px;cursor:pointer}
+.ico-btn{background:none;border:none;color:var(--text-sub);font-size:22px;padding:4px;cursor:pointer;line-height:1}
+
+/* ===== SETTINGS ===== */
+.set-pane{padding:18px;display:flex;flex-direction:column;gap:14px}
+.set-sec{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.set-row{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:5px}
+.set-row:last-child{border-bottom:none}
+.set-lbl{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-sub);text-transform:uppercase}
+.set-val{font-size:14px;color:var(--text)}
+.set-inp{background:transparent;border:none;color:var(--text);font-size:14px;width:100%;outline:none;padding:2px 0}
+.set-inp:focus{border-bottom:1px solid var(--accent)}
+.set-note{font-size:12px;color:var(--text-sub);line-height:1.75}
+.btn-save{width:100%;padding:12px;background:var(--accent);color:#000;border:none;border-radius:10px;font-family:'Oswald',sans-serif;font-size:15px;font-weight:700;letter-spacing:2px;cursor:pointer}
+.btn-save:active{opacity:0.8}
+.btn-dng{width:100%;padding:12px;background:transparent;color:var(--red);border:1px solid var(--red);border-radius:10px;font-size:14px;cursor:pointer}
+
+/* ホーム画面追加ガイド */
+.guide-box{background:rgba(88,166,255,0.07);border:1px solid rgba(88,166,255,0.2);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.guide-title{font-size:13px;font-weight:700;color:var(--blue)}
+.guide-step{display:flex;gap:10px;align-items:flex-start}
+.gs-num{width:22px;height:22px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.gs-txt{font-size:12px;color:var(--text-sub);line-height:1.65}
+.gs-txt b{color:var(--text)}
+.gs-txt .warn{color:var(--red);font-size:11px}
+
+/* ===== TOAST ===== */
+.toast{position:fixed;bottom:calc(76px + var(--safe-bot));left:12px;right:12px;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:500;z-index:600;border:1px solid;word-break:break-all;animation:ti 0.3s ease}
+@keyframes ti{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.toast.ok{background:rgba(63,185,80,0.15);border-color:var(--green);color:var(--green)}
+.toast.ng{background:rgba(248,81,73,0.15);border-color:var(--red);color:var(--red)}
+.toast.inf{background:rgba(88,166,255,0.15);border-color:var(--blue);color:var(--blue)}
+.toast.hidden{display:none}
+</style>
+</head>
+<body>
+
+<!-- ===== SETUP SCREEN ===== -->
+<div class="setup" id="setupScreen">
+  <div class="setup-logo">🚚</div>
+  <div>
+    <div class="setup-title">配車カレンダー</div>
+    <div class="setup-sub" style="margin-top:6px">配車書類を写真で読み取り<br>カレンダーに自動登録</div>
+  </div>
+  <div class="setup-card">
+    <div class="setup-lbl">Gemini API キー</div>
+    <input class="setup-inp" type="password" id="setupKey" placeholder="AIza..." autocomplete="off" autocorrect="off" spellcheck="false">
+    <div class="setup-hint">
+      <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com</a> で無料取得できます（Google アカウント必要）。<br>キーはこの端末内にのみ保存されます。取得したキーをそのまま貼り付けてください。
+    </div>
+  </div>
+  <button class="btn-start" onclick="startApp()">はじめる →</button>
+</div>
+
+<!-- ===== MAIN SCREEN ===== -->
+<div class="screen hidden" id="mainScreen">
+  <div class="header">
+    <span style="font-size:22px">🚚</span>
+    <span class="header-title">配車カレンダー</span>
+    <span class="ai-badge">✨ Gemini AI</span>
+  </div>
+
+  <div class="tab-content">
+
+    <!-- 読み取りタブ -->
+    <div class="tab-pane scan-pane" id="tabScan">
+
+      <input type="file" id="filePick" accept="image/*"                       style="display:none" onchange="onFile(this)">
+      <input type="file" id="fileCam"  accept="image/*" capture="environment" style="display:none" onchange="onFile(this)">
+
+      <div class="img-zone" id="imgZone">
+        <div class="placeholder" id="pholder">
+          <div style="font-size:44px">📄</div>
+          <div style="font-size:15px;font-weight:700;color:var(--text);margin-top:4px">配車書類を撮影 / 選択</div>
+          <div style="font-size:12px;color:var(--text-sub);margin-top:4px">手配書・依頼書・指示書など対応</div>
+        </div>
+        <div class="analyzing" id="analyzing">
+          <div class="spin-lg"></div>
+          <div class="analyzing-txt" id="analyzingTxt">Gemini AIが読み取り中...</div>
+        </div>
+        <img id="prevImg" class="preview" style="display:none">
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-h sec" onclick="document.getElementById('fileCam').click()">📷 カメラ</button>
+        <button class="btn-h pri" onclick="document.getElementById('filePick').click()">📂 ライブラリ</button>
+      </div>
+
+      <button class="btn-analyze" id="analyzeBtn" onclick="analyze()" disabled>
+        ✨ Gemini AIで読み取る
+      </button>
+
+      <div id="resultArea" style="display:none">
+        <div class="res-card">
+          <!-- 積み込み -->
+          <div class="res-sec">
+            <div class="res-hd ld">🟢 積み込み</div>
+            <div class="res-fld">
+              <div class="fld-lbl">日付・時刻</div>
+              <div class="dt-row">
+                <input class="fi fd" type="date"   id="f_load_date">
+                <input class="fi ft" type="time"   id="f_load_time">
+                <select class="fi fa"              id="f_load_ampm">
+                  <option value="">時刻</option>
+                  <option value="AM">AM</option>
+                  <option value="PM">PM</option>
+                </select>
+              </div>
+              <div class="fld-hint">※ AM/PMのみ記載の場合は右で選択</div>
+            </div>
+            <div class="res-fld">
+              <div class="fld-lbl">場所・会社名</div>
+              <input class="fi-full" id="f_load_loc" placeholder="会社名・住所（手動入力も可）">
+            </div>
+          </div>
+          <!-- 荷下ろし -->
+          <div class="res-sec">
+            <div class="res-hd ul">🔴 荷下ろし</div>
+            <div class="res-fld">
+              <div class="fld-lbl">日付・時刻</div>
+              <div class="dt-row">
+                <input class="fi fd" type="date"   id="f_unload_date">
+                <input class="fi ft" type="time"   id="f_unload_time">
+                <select class="fi fa"              id="f_unload_ampm">
+                  <option value="">時刻</option>
+                  <option value="AM">AM</option>
+                  <option value="PM">PM</option>
+                </select>
+              </div>
+              <div class="fld-hint">※ AM/PMのみ記載の場合は右で選択</div>
+            </div>
+            <div class="res-fld">
+              <div class="fld-lbl">場所・会社名</div>
+              <input class="fi-full" id="f_unload_loc" placeholder="会社名・住所（手動入力も可）">
+            </div>
+          </div>
+        </div>
+        <button class="btn-reg" onclick="register()">📅 カレンダーに登録する</button>
+        <button class="btn-can" onclick="clearScan()">キャンセル</button>
+      </div>
+
+    </div><!-- /scan -->
+
+    <!-- カレンダータブ -->
+    <div class="tab-pane hidden cal-pane" id="tabCal">
+      <div class="cal-nav">
+        <button class="cal-arr" onclick="chMon(-1)">‹</button>
+        <div class="cal-lbl" id="calLbl"></div>
+        <button class="cal-arr" onclick="chMon(1)">›</button>
+      </div>
+      <div class="cal-stats" id="calStats"></div>
+      <div class="wdays">
+        <div class="wd su">日</div><div class="wd">月</div><div class="wd">火</div>
+        <div class="wd">水</div><div class="wd">木</div><div class="wd">金</div>
+        <div class="wd sa">土</div>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+
+    <!-- 設定タブ -->
+    <div class="tab-pane hidden set-pane" id="tabSettings">
+
+      <div class="guide-box">
+        <div class="guide-title">📱 ホーム画面への追加方法（iPhone）</div>
+        <div class="guide-step"><div class="gs-num">1</div><div class="gs-txt"><b>Safari</b> でこのページを開く<br><span class="warn">※ Chrome・LINEブラウザ等は不可</span></div></div>
+        <div class="guide-step"><div class="gs-num">2</div><div class="gs-txt">画面下部の <b>共有ボタン（□↑）</b> をタップ</div></div>
+        <div class="guide-step"><div class="gs-num">3</div><div class="gs-txt"><b>「ホーム画面に追加」</b> を選択 → <b>「追加」</b></div></div>
+        <div style="font-size:11px;color:var(--text-sub);padding-left:32px;line-height:1.7">アイコンから起動後もAPIキーは保持されます</div>
+      </div>
+
+      <div class="set-sec">
+        <div class="set-row">
+          <div class="set-lbl">Gemini API キー</div>
+          <input class="set-inp" type="password" id="settingsKey" placeholder="AIza..." autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+      <button class="btn-save" onclick="saveKey()">保存する</button>
+
+      <div class="set-sec">
+        <div class="set-row">
+          <div class="set-lbl">AI エンジン</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:4px 0">
+            <span style="font-size:22px">✨</span>
+            <div>
+              <div class="set-val">Gemini 2.5 Flash</div>
+              <div style="font-size:11px;color:var(--text-sub)">無料枠：1日1500回 / 月額0円</div>
+            </div>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-lbl">画像圧縮</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
+            <div>
+              <div class="set-val">長辺 <span id="maxPxLabel">1200</span>px / JPEG 85%</div>
+              <div style="font-size:11px;color:var(--text-sub)">API送信量を約1/30に削減</div>
+            </div>
+          </div>
+          <input type="range" id="maxPxSlider" min="800" max="2000" step="200" value="1200"
+            style="width:100%;accent-color:var(--accent);margin-top:6px"
+            oninput="updateMaxPx(this.value)">
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-sub);margin-top:2px">
+            <span>800px<br>高節約</span><span style="text-align:center">1200px<br>推奨</span><span style="text-align:right">2000px<br>高精度</span>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-lbl">本日の使用回数</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
+            <div>
+              <div class="set-val"><span id="todayCount">0</span> 回 <span style="font-size:11px;color:var(--text-sub)">/ 1500回</span></div>
+              <div style="height:6px;background:var(--card);border-radius:3px;margin-top:6px;overflow:hidden;width:200px">
+                <div id="usageBar" style="height:100%;background:var(--green);border-radius:3px;width:0%;transition:width 0.3s"></div>
+              </div>
+            </div>
+            <button onclick="resetCount()" style="padding:6px 12px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-sub);font-size:11px;cursor:pointer">リセット</button>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-lbl">対応書類</div>
+          <div class="set-note">
+            配車依頼書 / 手配書 / 輸送依頼書<br>
+            輸送指示書 / チャーター便手配依頼書<br>
+            ※ 手書き・印刷どちらも対応
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-lbl">データ</div>
+          <div class="set-note">登録済みイベント：<span id="evCount">0</span> 件</div>
+        </div>
+      </div>
+      <button onclick="addTestEvent()" style="width:100%;padding:12px;background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:10px;font-size:14px;cursor:pointer;margin-bottom:8px">📅 今日にテストイベントを追加（動作確認用）</button>
+      <button class="btn-dng" onclick="deleteAll()">全データを削除する</button>
+    </div>
+
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tBtn0" onclick="sw(0)"><span class="ti">📸</span>読み取り</button>
+    <button class="tab-btn"        id="tBtn1" onclick="sw(1)"><span class="ti">📅</span>カレンダー</button>
+    <button class="tab-btn"        id="tBtn2" onclick="sw(2)"><span class="ti">⚙️</span>設定</button>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="m-ov hidden" id="mOv" onclick="closeMod()">
+  <div class="m-box" onclick="event.stopPropagation()">
+    <div class="m-handle"></div>
+    <div class="m-hd">
+      <div class="m-title" id="mTitle"></div>
+      <button class="ico-btn" onclick="closeMod()">×</button>
+    </div>
+    <div class="m-body" id="mBody"></div>
+    <div class="m-foot" id="mFoot">
+      <button class="btn-mdel" onclick="delCurEv()">削除</button>
+      <button class="btn-mcl"  onclick="closeMod()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast hidden" id="toast"></div>
+
+<script>
+'use strict';
+const G = id => document.getElementById(id);
+let evs=[], calY=new Date().getFullYear(), calM=new Date().getMonth();
+let curFile=null, curB64=null, curMime=null, curEvId=null, toastTmr=null;
+let MAX_PX=1200;
+
+// ===== BOOT =====
+function boot(){
+  load();
+  // ServiceWorker（完全非同期・エラーは無視）
+  if('serviceWorker' in navigator){
+    setTimeout(()=>{
+      navigator.serviceWorker.register('sw.js')
+        .then(()=>console.log('SW registered'))
+        .catch(()=>{}); // 失敗しても動作に影響なし
+    }, 1000);
+  }
+  const key = localStorage.getItem('gemini_key');
+  if(key){
+    showMain();
+  }
+  // セットアップ画面のEnterキー対応
+  const si = G('setupKey');
+  if(si) si.addEventListener('keydown', e=>{ if(e.key==='Enter') startApp(); });
+}
+
+function startApp(){
+  try{
+    const inp=G('setupKey');
+    const key=(inp?inp.value||'':'').trim();
+    if(!key){
+      // キーが空なら警告だけして進む（後で設定タブから変更可）
+      showSetupError('APIキーを入力してください');
+      return;
+    }
+    // 検証なしで保存して進む（形式チェックを廃止）
+    localStorage.setItem('gemini_key', key);
+    showMain();
+  }catch(e){
+    // エラーが起きても強制的に進む
+    try{ localStorage.setItem('gemini_key', G('setupKey').value||''); }catch(_){}
+    showMain();
+  }
+}
+
+function showSetupError(msg){
+  // セットアップ画面専用のエラー表示（toastはmainScreenにあるため）
+  let el=G('setupErr');
+  if(!el){
+    el=document.createElement('div');
+    el.id='setupErr';
+    el.style.cssText='width:100%;padding:10px 14px;background:rgba(248,81,73,0.15);border:1px solid #f85149;border-radius:8px;color:#f85149;font-size:13px;text-align:center';
+    const btn=G('setupScreen').querySelector('.btn-start');
+    if(btn) btn.insertAdjacentElement('beforebegin',el);
+    else G('setupScreen').appendChild(el);
+  }
+  el.textContent=msg;
+  el.style.display='block';
+  setTimeout(()=>{el.style.display='none';},3000);
+}
+
+function showMain(){
+  try{
+    G('setupScreen').classList.add('hidden');
+    G('mainScreen').classList.remove('hidden');
+  }catch(e){ console.error('showMain screen toggle:',e); }
+
+  // 各DOM操作を個別に try/catch
+  try{
+    const key=localStorage.getItem('gemini_key')||'';
+    const sk=G('settingsKey'); if(sk) sk.value=key;
+  }catch(_){}
+
+  try{
+    ['load','unload'].forEach(p=>{
+      const ampmEl=G('f_'+p+'_ampm');
+      const timeEl=G('f_'+p+'_time');
+      if(ampmEl) ampmEl.addEventListener('change',function(){
+        if(this.value){if(timeEl){timeEl.value='';timeEl.disabled=true;}}
+        else{if(timeEl) timeEl.disabled=false;}
+      });
+      if(timeEl) timeEl.addEventListener('input',function(){
+        if(this.value && ampmEl) ampmEl.value='';
+      });
+    });
+  }catch(_){}
+
+  try{
+    const savedPx=parseInt(localStorage.getItem('max_px')||'1200');
+    MAX_PX=savedPx;
+    const sl=G('maxPxSlider'); if(sl) sl.value=savedPx;
+    const lb=G('maxPxLabel'); if(lb) lb.textContent=savedPx;
+  }catch(_){}
+
+  try{ renderCal(); }catch(_){}
+  try{ updCount(); }catch(_){}
+  try{ updateUsageUI(); }catch(_){}
+}
+
+function load(){try{evs=JSON.parse(localStorage.getItem('hev')||'[]');}catch{evs=[];}}
+function save(){localStorage.setItem('hev',JSON.stringify(evs));updCount();}
+function updCount(){const el=G('evCount');if(el)el.textContent=evs.length;}
+
+function saveKey(){
+  const key=G('settingsKey').value.trim();
+  if(!key){toast('キーを入力してください','ng');return;}
+  localStorage.setItem('gemini_key',key);
+  toast('✅ 保存しました','ok');
+}
+
+// ===== FILE + 圧縮 =====
+function onFile(inp){
+  const f=inp.files[0]; if(!f)return;
+  curFile=f;
+
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      // Canvas で長辺1200pxにリサイズ
+      const MAX=MAX_PX;
+      let w=img.width, h=img.height;
+      if(w>MAX||h>MAX){
+        if(w>=h){ h=Math.round(h*MAX/w); w=MAX; }
+        else     { w=Math.round(w*MAX/h); h=MAX; }
+      }
+      const canvas=document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      const ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,w,h);
+
+      // 書類読み取り用：コントラスト強化・シャープ化
+      ctx.filter='contrast(1.25) brightness(1.05)';
+      ctx.drawImage(img,0,0,w,h);
+      ctx.filter='none';
+
+      // JPEG 品質0.88で出力（書類は少し高めに）
+      const compressed=canvas.toDataURL('image/jpeg',0.88);
+      curB64=compressed.split(',')[1];
+      curMime='image/jpeg';
+
+      // 圧縮率をトーストで表示
+      const origKB=Math.round(f.size/1024);
+      const compKB=Math.round(curB64.length*0.75/1024);
+      toast('📦 圧縮完了 '+origKB+'KB → '+compKB+'KB（'+w+'×'+h+'px）','inf');
+
+      G('prevImg').src=compressed;
+      G('prevImg').style.display='block';
+      G('pholder').style.display='none';
+      G('analyzing').classList.remove('show');
+      G('analyzeBtn').disabled=false;
+      G('resultArea').style.display='none';
+      G('imgZone').classList.add('has-img');
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(f);
+}
+
+// ===== ANALYZE =====
+async function analyze(){
+  if(!curB64) return;
+  const key=localStorage.getItem('gemini_key');
+  if(!key){toast('APIキーが設定されていません','ng');sw(2);return;}
+
+  const btn=G('analyzeBtn');
+  btn.disabled=true;
+  btn.innerHTML='<div class="spin-sm"></div> 読み取り中...';
+  G('prevImg').style.display='none';
+  G('analyzing').classList.add('show');
+  G('analyzingTxt').textContent='Gemini AIが読み取り中...';
+
+  const prompt=`あなたは日本の物流・運送業の書類を読み取るAIです。
+この画像から積み込みと荷下ろしの情報を抽出し、以下のJSONのみを返してください。
+マークダウン・コードブロック・説明文は一切不要です。JSONのみ。
+
+{"load":{"date":"","time":"","ampm":"","location":"","company":""},"unload":{"date":"","time":"","ampm":"","location":"","company":""}}
+
+━━━ load（積み込み）の読み取り方 ━━━
+対象ラベル:「積日」「積込日」「積込時間」「積地」「積場所」「引取」「引取先」「引取日」「集荷」「持込先」「持込」「持込日」「発送」
+
+date: 積み込み日をYYYY-MM-DD形式で
+  - 「2026年05月15日」→ 2026-05-15
+  - 「令和8年5月14日」→ 令和元年=2019年なので 令和8年=2026年 → 2026-05-14
+  - 「5月8日(金)」など年なし → 書類の発行日・作成日・文書日付から年を推定
+  - 年が全くわからない場合は現在年を使用
+
+time: 具体的な時刻をHH:mm形式で（以下のパターンに対応）
+  - 「16時00分まで」→ 16:00
+  - 「16時00分」→ 16:00
+  - 「11:00〜13:00」→ 11:00（開始時刻を優先）
+  - 「11:00～13:00」→ 11:00
+  - 「9時30分指定」→ 09:30
+  - 「AM11:00まで」→ 11:00（この場合ampmは空文字）
+  - 「11：00」全角コロン → 11:00
+
+ampm: 時刻が不明でAM/PMのみ記載の場合
+  - 「AM」のみ → AM
+  - 「PM」のみ → PM
+  - 「AM・PM」両方記載 → AM（午前を優先）
+  - 具体的な時刻がある場合は必ず空文字
+
+location: 積み込み先の住所（都道府県〜番地まで全て）
+  例:「栃木県矢板市早川町174-4」「神奈川県高座郡寒川町田端1591」
+
+company: 積み込み先の会社名・施設名・センター名
+  例:「シャープジャスダロジスティクス 関東BC」「新和工業株式会社 佐野工場」「リスパック株式会社 関東工場」
+
+━━━ unload（荷下ろし）の読み取り方 ━━━
+対象ラベル:「卸日」「荷卸」「荷卸日」「荷下ろし」「納品日」「納品先」「納入日」「配達日」「配送先」「届先」「搬入」
+
+dateとtime: loadと同じルールを適用
+
+time特記:
+  - 「17:00迄」→ 17:00
+  - 「AM11:00まで」→ 11:00（ampmは空文字）
+  - 「9時30分指定」→ 09:30
+
+location: 荷下ろし先の住所
+company: 荷下ろし先の会社名・施設名
+
+━━━ 重要な注意事項 ━━━
+1. 書類が横向き・縦向きどちらでも正しく読み取ること
+2. 手書き文字にも対応すること
+3. 「引取先」と「納品先」が同じ住所欄に並ぶ場合はそれぞれ正しく分類
+4. 「持込先」は必ずload（積み込み）として扱う
+5. 同じ日付が積み込みと荷下ろし両方にある場合は両方に記入
+6. 不明・記載なしは空文字のまま
+7. AMとPMは必ず半角大文字
+8. JSONのみ返答すること。前後に文字を入れない。`;
+
+  try{
+    const res=await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+      {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          contents:[{parts:[
+            {inline_data:{mime_type:curMime,data:curB64}},
+            {text:prompt}
+          ]}],
+          generationConfig:{temperature:0,maxOutputTokens:1024}
+        })
+      }
+    );
+    const data=await res.json();
+    if(!res.ok) throw new Error(data?.error?.message||`HTTP ${res.status}`);
+
+    const raw=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+    let parsed={
+      load:  {date:'',time:'',ampm:'',location:'',company:''},
+      unload:{date:'',time:'',ampm:'',location:'',company:''}
+    };
+    try{
+      let txt=raw
+        .replace(/```[a-zA-Z]*/g,'').replace(/```/g,'')
+        .replace(/｛/g,'{').replace(/｝/g,'}')
+        .replace(/"/g,'"').replace(/"/g,'"')   // 全角ダブルクォート
+        .replace(/：/g,':')                     // 全角コロン
+        .trim();
+      const s=txt.indexOf('{'), e=txt.lastIndexOf('}');
+      if(s===-1||e<=s) throw new Error('no json');
+      let json=txt.slice(s,e+1);
+      // 文字列値内の改行・制御文字除去
+      json=json.replace(/("(?:[^"\\]|\\.)*")/g,m=>
+        m.replace(/\n/g,' ').replace(/\r/g,'').replace(/[\x00-\x1F]/g,'')
+      );
+      const tmp=JSON.parse(json);
+      // フィールドの正規化
+      ['load','unload'].forEach(k=>{
+        if(!tmp[k]) tmp[k]={date:'',time:'',ampm:'',location:'',company:''};
+        // 全角数字→半角
+        ['date','time'].forEach(f=>{
+          if(tmp[k][f]) tmp[k][f]=tmp[k][f]
+            .replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+            .replace(/[：]/g,':').trim();
+        });
+        // ampm の表記ゆれ正規化
+        if(tmp[k].ampm){
+          const ap=tmp[k].ampm.toUpperCase().replace(/[^AMP]/g,'');
+          tmp[k].ampm=(ap.includes('AM')||ap==='A')?'AM':(ap.includes('PM')||ap==='P')?'PM':'';
+        }
+        // time と ampm の排他チェック
+        if(tmp[k].time && tmp[k].ampm) tmp[k].ampm='';
+      });
+      parsed=tmp;
+    }catch(parseErr){
+      console.warn('JSON parse error:',parseErr,'raw:',raw.slice(0,200));
+    }
+
+    fillForm('load',   parsed.load);
+    fillForm('unload', parsed.unload);
+    G('analyzing').classList.remove('show');
+    G('prevImg').style.display='block';
+    G('resultArea').style.display='flex';
+    countUp();
+    // 読み取り品質チェック
+    const loadOk  = !!(parsed.load?.date);
+    const unloadOk= !!(parsed.unload?.date);
+    if(loadOk && unloadOk){
+      toast('📋 読み取り完了！内容をご確認ください','ok');
+    } else if(loadOk || unloadOk){
+      toast('⚠️ 一部読み取れませんでした。内容を確認・補完してください','inf');
+    } else {
+      toast('❌ 日付を読み取れませんでした。もう一度試すか手動入力してください','ng');
+    }
+  }catch(e){
+    G('analyzing').classList.remove('show');
+    G('prevImg').style.display='block';
+    G('resultArea').style.display='flex';
+    const msg=e.message||'';
+    if(msg.includes('API_KEY')||msg.includes('401')){
+      toast('APIキーが無効です。設定タブで確認してください','ng');
+    } else if(msg.includes('429')||msg.includes('RESOURCE_EXHAUSTED')){
+      toast('⏱️ リクエスト制限中です。1分後にもう一度お試しください','ng');
+    } else if(msg.includes('quota')||msg.includes('QUOTA')){
+      toast('本日の上限に達しました（1500回/日）','ng');
+    } else {
+      toast('読み取りエラー: '+msg.slice(0,60),'ng');
+    }
+  }
+  btn.disabled=false;
+  btn.innerHTML='✨ Gemini AIで読み取る';
+}
+
+function fillForm(pfx,d){
+  if(!d)return;
+  G(`f_${pfx}_date`).value=d.date||'';
+  const ap=(d.ampm||'').toUpperCase();
+  const te=G(`f_${pfx}_time`), ae=G(`f_${pfx}_ampm`);
+  if(ap==='AM'||ap==='PM'){te.value='';te.disabled=true;ae.value=ap;}
+  else{te.disabled=false;ae.value='';te.value=d.time||'';}
+  G(`f_${pfx}_loc`).value=[d.company,d.location].filter(Boolean).join(' ');
+}
+
+// ===== REGISTER =====
+function getDt(pfx){
+  const d=G(`f_${pfx}_date`).value,t=G(`f_${pfx}_time`).value,a=G(`f_${pfx}_ampm`).value;
+  if(!d)return null;
+  if(a)return `${d} ${a}`;
+  if(t)return `${d}T${t}`;
+  return d;
+}
+function register(){
+  const lDt=getDt('load'),lLoc=G('f_load_loc').value;
+  const uDt=getDt('unload'),uLoc=G('f_unload_loc').value;
+  const ne=[];
+  if(lDt) ne.push({id:Date.now()+'l',type:'load',  datetime:lDt,location:lLoc});
+  if(uDt) ne.push({id:Date.now()+'u',type:'unload',datetime:uDt,location:uLoc});
+  if(!ne.length){toast('日付を入力してください','ng');return;}
+  evs.push(...ne);save();clearScan();
+  const rd=new Date(ne[0].datetime.replace(/ AM| PM/,''));
+  if(!isNaN(rd)){calY=rd.getFullYear();calM=rd.getMonth();}
+  renderCal();
+  toast(`✅ ${ne.length}件を登録しました`,'ok');
+  sw(1);
+}
+function clearScan(){
+  G('resultArea').style.display='none';
+  G('prevImg').style.display='none';G('prevImg').src='';
+  G('pholder').style.display='flex';
+  G('analyzing').classList.remove('show');
+  G('imgZone').classList.remove('has-img');
+  G('analyzeBtn').disabled=true;
+  G('analyzeBtn').innerHTML='✨ Gemini AIで読み取る';
+  curFile=null;curB64=null;
+  ['load','unload'].forEach(p=>{
+    ['date','time','loc'].forEach(f=>{const el=G(`f_${p}_${f}`);if(el){el.value='';el.disabled=false;}});
+    G(`f_${p}_ampm`).value='';
+  });
+  G('filePick').value='';G('fileCam').value='';
+}
+
+// ===== CALENDAR =====
+function chMon(d){calM+=d;if(calM<0){calM=11;calY--;}if(calM>11){calM=0;calY++;}renderCal();}
+function renderCal(){
+  G('calLbl').textContent=`${calY}年${calM+1}月`;
+  const lc=evs.filter(e=>e.type==='load').length,uc=evs.filter(e=>e.type==='unload').length;
+  G('calStats').innerHTML=`<div class="chip"><div class="dot" style="background:var(--green)"></div>積み込み ${lc}件</div><div class="chip"><div class="dot" style="background:var(--red)"></div>荷下ろし ${uc}件</div>`;
+  const f=new Date(calY,calM,1),l=new Date(calY,calM+1,0),td=new Date();
+  const g=G('calGrid');g.innerHTML='';
+  for(let i=0;i<f.getDay();i++) g.appendChild(mkCell(new Date(calY,calM,i-f.getDay()+1),false,td));
+  for(let d=1;d<=l.getDate();d++) g.appendChild(mkCell(new Date(calY,calM,d),true,td));
+  let t=1;while(g.children.length%7!==0) g.appendChild(mkCell(new Date(calY,calM+1,t++),false,td));
+}
+function evDate(ev){return new Date((ev.datetime||'').replace(/ AM| PM/,''));}
+function mkCell(date,cur,td){
+  const c=document.createElement('div'),dw=date.getDay();
+  const isT=date.toDateString()===td.toDateString();
+  c.className='dcell'+(!cur?' other':'')+(isT?' today':'')+(dw===0?' sun':dw===6?' sat':'');
+  const de=evs.filter(e=>{const d=evDate(e);return !isNaN(d)&&d.toDateString()===date.toDateString();});
+  c.innerHTML=`<div class="dnum">${date.getDate()}</div><div class="ddots">${de.map(e=>`<div class="ddot ${e.type}"></div>`).join('')}</div>`;
+  if(de.length) c.addEventListener('click',()=>openMod(date,de));
+  return c;
+}
+function fmtTime(ev){
+  const dt=ev.datetime||'';
+  if(dt.includes(' AM'))return 'AM（午前）';
+  if(dt.includes(' PM'))return 'PM（午後）';
+  const d=new Date(dt);
+  if(!isNaN(d)&&dt.includes('T'))return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  return '時刻未定';
+}
+function openMod(date,de){
+  G('mTitle').textContent=`📅 ${date.getMonth()+1}月${date.getDate()}日`;
+
+  // イベント詳細カード
+  G('mBody').innerHTML = de.map(ev=>{
+    const col=ev.type==='load'?'var(--green)':'var(--red)';
+    const lbl=ev.type==='load'?'🟢 積み込み':'🔴 荷下ろし';
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:13px;font-weight:700;color:${col}">${lbl}</div>
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span style="font-size:20px;flex-shrink:0">🕐</span>
+        <div><div style="font-size:10px;color:var(--text-sub);margin-bottom:2px">時刻</div><div style="font-size:15px">${fmtTime(ev)}</div></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span style="font-size:20px;flex-shrink:0">📍</span>
+        <div><div style="font-size:10px;color:var(--text-sub);margin-bottom:2px">場所</div><div style="font-size:14px;line-height:1.6">${ev.location||'—'}</div></div>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:8px">
+        <div style="font-size:10px;color:var(--text-sub);letter-spacing:1px;text-transform:uppercase">カレンダーに追加</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button onclick="exportIcs('${ev.id}')"
+            style="padding:11px 6px;background:rgba(88,166,255,0.15);color:var(--blue);border:1px solid var(--blue);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;line-height:1.5">
+            📲 iPhone<br>カレンダー
+          </button>
+          <button onclick="exportGcal('${ev.id}')"
+            style="padding:11px 6px;background:rgba(63,185,80,0.15);color:var(--green);border:1px solid var(--green);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;line-height:1.5">
+            📅 Google<br>カレンダー
+          </button>
+        </div>
+        <button onclick="delEv('${ev.id}')"
+          style="width:100%;padding:9px;background:rgba(248,81,73,0.1);color:var(--red);border:1px solid var(--red);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">
+          🗑 このイベントを削除
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // 複数件まとめてボタンはフッターに表示
+  if(de.length > 1){
+    G('mFoot').style.display='flex';
+    G('mFoot').innerHTML=`
+      <button onclick="exportIcsMulti(${JSON.stringify(de.map(e=>e.id))})"
+        style="flex:1;padding:12px 4px;background:rgba(88,166,255,0.15);color:var(--blue);border:1px solid var(--blue);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;line-height:1.4">
+        📲 iPhoneへ<br><span style="font-size:10px">全${de.length}件まとめて</span>
+      </button>
+      <button onclick="exportGcalMulti(${JSON.stringify(de.map(e=>e.id))})"
+        style="flex:1;padding:12px 4px;background:rgba(63,185,80,0.15);color:var(--green);border:1px solid var(--green);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;line-height:1.4">
+        📅 Googleへ<br><span style="font-size:10px">全${de.length}件順番に</span>
+      </button>`;
+  } else {
+    G('mFoot').style.display='none';
+  }
+  G('mOv').classList.remove('hidden');
+}
+function delEv(id){evs=evs.filter(e=>e.id!==id);save();renderCal();closeMod();toast('削除しました','ok');}
+function closeMod(){G('mOv').classList.add('hidden');G('mFoot').style.display='';curEvId=null;}
+function delCurEv(){if(!curEvId)return;evs=evs.filter(e=>e.id!==curEvId);save();renderCal();closeMod();toast('削除しました','ok');}
+
+const PANES=['tabScan','tabCal','tabSettings'];
+function sw(i){
+  PANES.forEach((id,j)=>{G(id).classList.toggle('hidden',j!==i);G(`tBtn${j}`).classList.toggle('active',j===i);});
+  if(i===1)renderCal();
+}
+// ===== ICS EXPORT =====
+function makeIcsEvent(ev){
+  const dt=ev.datetime||'';
+  const lbl=ev.type==='load'?'🟢 積み込み':'🔴 荷下ろし';
+  const loc=(ev.location||'').replace(/,/g,'\,').replace(/
+/g,'\n');
+  const uid=ev.id+'@haisha-cal';
+  const now=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+/,'');
+
+  let dtstart, dtend;
+
+  if(dt.includes('T')){
+    // 時刻あり: ローカル時刻でフォーマット
+    const d=new Date(dt);
+    const pad=n=>String(n).padStart(2,'0');
+    const local=`${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+    dtstart=`DTSTART;TZID=Asia/Tokyo:${local}`;
+    // 終了は1時間後
+    const de=new Date(d.getTime()+60*60*1000);
+    const localE=`${de.getFullYear()}${pad(de.getMonth()+1)}${de.getDate()}T${pad(de.getHours())}${pad(de.getMinutes())}00`;
+    dtend=`DTEND;TZID=Asia/Tokyo:${localE}`;
+  } else {
+    // 日付のみ または AM/PM
+    const base=dt.replace(/ AM| PM/,'');
+    const d=new Date(base);
+    const pad=n=>String(n).padStart(2,'0');
+    const ymd=`${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
+
+    if(dt.includes(' AM')){
+      dtstart=`DTSTART;TZID=Asia/Tokyo:${ymd}T090000`;
+      dtend  =`DTEND;TZID=Asia/Tokyo:${ymd}T120000`;
+    } else if(dt.includes(' PM')){
+      dtstart=`DTSTART;TZID=Asia/Tokyo:${ymd}T130000`;
+      dtend  =`DTEND;TZID=Asia/Tokyo:${ymd}T170000`;
+    } else {
+      // 終日
+      dtstart=`DTSTART;VALUE=DATE:${ymd}`;
+      const next=new Date(d.getTime()+86400000);
+      const ymdN=`${next.getFullYear()}${pad(next.getMonth()+1)}${pad(next.getDate())}`;
+      dtend=`DTEND;VALUE=DATE:${ymdN}`;
+    }
+  }
+
+  return [
+    'BEGIN:VEVENT',
+    `UID:${uid}`,
+    `DTSTAMP:${now}Z`,
+    dtstart,
+    dtend,
+    `SUMMARY:${lbl} ${ev.location?'/ '+ev.location.slice(0,20):''}`,
+    `DESCRIPTION:種別: ${lbl}\n場所: ${ev.location||'未設定'}\n時刻: ${fmtTime(ev)}`,
+    `LOCATION:${loc}`,
+    'END:VEVENT'
+  ].join('\r\n');
+}
+
+function buildIcs(eventIds){
+  const targets = Array.isArray(eventIds)
+    ? evs.filter(e=>eventIds.includes(e.id))
+    : evs.filter(e=>e.id===eventIds);
+  if(!targets.length){ toast('イベントが見つかりません','ng'); return null; }
+
+  const lines=[
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//配車カレンダー//JP',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'X-WR-TIMEZONE:Asia/Tokyo',
+    'BEGIN:VTIMEZONE',
+    'TZID:Asia/Tokyo',
+    'BEGIN:STANDARD',
+    'TZOFFSETFROM:+0900',
+    'TZOFFSETTO:+0900',
+    'TZNAME:JST',
+    'DTSTART:19700101T000000',
+    'END:STANDARD',
+    'END:VTIMEZONE',
+    ...targets.map(makeIcsEvent),
+    'END:VCALENDAR'
+  ];
+  return lines.join('\r\n');
+}
+
+function exportIcs(evId){
+  const ics=buildIcs(evId);
+  if(!ics) return;
+  const ev=evs.find(e=>e.id===evId);
+  const fname=`haisha_${(ev?.datetime||'event').slice(0,10)}.ics`;
+  downloadIcs(ics, fname);
+}
+
+function exportIcsMulti(ids){
+  const ics=buildIcs(ids);
+  if(!ics) return;
+  const fname=`haisha_${ids.length}件.ics`;
+  downloadIcs(ics, fname);
+}
+
+function downloadIcs(ics, fname){
+  const blob=new Blob([ics],{type:'text/calendar;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=fname;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},1000);
+  toast('📲 カレンダーファイルを開いてください','inf');
+}
+
+// ===== GOOGLE CALENDAR EXPORT =====
+function makeGcalUrl(ev){
+  const dt=ev.datetime||'';
+  const lbl=ev.type==='load'?'🟢 積み込み':'🔴 荷下ろし';
+  const title=encodeURIComponent(`${lbl}${ev.location?' / '+ev.location.slice(0,30):''}`);
+  const details=encodeURIComponent(`種別: ${lbl}\n場所: ${ev.location||'未設定'}\n時刻: ${fmtTime(ev)}`);
+  const loc=encodeURIComponent(ev.location||'');
+  const pad=n=>String(n).padStart(2,'0');
+
+  let dates;
+  if(dt.includes('T')){
+    const d=new Date(dt);
+    const fmt=x=>`${x.getFullYear()}${pad(x.getMonth()+1)}${pad(x.getDate())}T${pad(x.getHours())}${pad(x.getMinutes())}00`;
+    const end=new Date(d.getTime()+60*60*1000);
+    dates=`${fmt(d)}/${fmt(end)}`;
+  } else {
+    const base=dt.replace(/ AM| PM/,'');
+    const d=new Date(base);
+    const ymd=`${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
+    if(dt.includes(' AM'))      dates=`${ymd}T090000/${ymd}T120000`;
+    else if(dt.includes(' PM')) dates=`${ymd}T130000/${ymd}T170000`;
+    else {
+      const next=new Date(d.getTime()+86400000);
+      const ymdN=`${next.getFullYear()}${pad(next.getMonth()+1)}${pad(next.getDate())}`;
+      dates=`${ymd}/${ymdN}`;
+    }
+  }
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}&details=${details}&location=${loc}&ctz=Asia/Tokyo`;
+}
+
+function exportGcal(evId){
+  const ev=evs.find(e=>e.id===evId);
+  if(!ev){ toast('イベントが見つかりません','ng'); return; }
+  const _a=document.createElement('a');
+  _a.href=makeGcalUrl(ev);_a.target='_blank';_a.rel='noopener';
+  document.body.appendChild(_a);_a.click();setTimeout(()=>_a.remove(),500);
+  toast('📅 Googleカレンダーを開きました','ok');
+}
+
+// 複数件は順番にタブで開く（ブラウザのポップアップブロック対策で確認あり）
+async function exportGcalMulti(ids){
+  const targets=evs.filter(e=>ids.includes(e.id));
+  if(!targets.length){ toast('イベントが見つかりません','ng'); return; }
+  if(targets.length>1 && !confirm(`${targets.length}件分のGoogleカレンダー追加画面を順番に開きます。\nよろしいですか？`)){ return; }
+  for(const ev of targets){
+    const _a=document.createElement('a');
+    _a.href=makeGcalUrl(ev);_a.target='_blank';_a.rel='noopener';
+    document.body.appendChild(_a);_a.click();setTimeout(()=>_a.remove(),500);
+    await new Promise(r=>setTimeout(r,600)); // ポップアップブロック対策
+  }
+  toast(`📅 ${targets.length}件のGoogleカレンダー画面を開きました`,'ok');
+}
+
+function addTestEvent(){
+  const today=new Date();
+  const pad=n=>String(n).padStart(2,'0');
+  const ymd=`${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+  evs.push({id:Date.now()+'l',type:'load',  datetime:`${ymd}T09:00`,location:'テスト積み込み先 栃木県○○市'});
+  evs.push({id:Date.now()+'u',type:'unload',datetime:`${ymd}T17:00`,location:'テスト荷下ろし先 神奈川県○○市'});
+  save(); renderCal();
+  toast('✅ 今日にテストイベントを追加しました。カレンダーを確認してください','ok');
+  sw(1);
+}
+function deleteAll(){if(!confirm('全データを削除しますか？'))return;evs=[];save();renderCal();toast('削除しました','ok');}
+function toast(msg,type='ok'){
+  const t=G('toast');t.textContent=msg;t.className='toast '+type;
+  clearTimeout(toastTmr);toastTmr=setTimeout(()=>{t.className='toast hidden';},4000);
+}
+
+// ===== 圧縮サイズ設定 =====
+function updateMaxPx(val){
+  MAX_PX=parseInt(val);
+  localStorage.setItem('max_px',val);
+  document.getElementById('maxPxLabel').textContent=val;
+}
+
+// ===== 使用回数カウンター =====
+function countUp(){
+  const today=new Date().toDateString();
+  const saved=JSON.parse(localStorage.getItem('api_usage')||'{"date":"","count":0}');
+  const count=(saved.date===today?saved.count:0)+1;
+  localStorage.setItem('api_usage',JSON.stringify({date:today,count}));
+  updateUsageUI();
+}
+function resetCount(){
+  localStorage.setItem('api_usage',JSON.stringify({date:new Date().toDateString(),count:0}));
+  updateUsageUI();
+  toast('リセットしました','ok');
+}
+function updateUsageUI(){
+  try{
+    const today=new Date().toDateString();
+    const saved=JSON.parse(localStorage.getItem('api_usage')||'{"date":"","count":0}');
+    const count=saved.date===today?saved.count:0;
+    const el=document.getElementById('todayCount');
+    const bar=document.getElementById('usageBar');
+    if(el) el.textContent=count;
+    if(bar){
+      const pct=Math.min(count/1500*100,100);
+      bar.style.width=pct+'%';
+      bar.style.background=pct>80?'var(--red)':pct>50?'var(--accent)':'var(--green)';
+    }
+  }catch(_){}
+}
+
+boot();
+</script>
+</body>
+</html>
