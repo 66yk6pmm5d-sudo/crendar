@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="配車CAL">
+<meta name="theme-color" content="#0d1117">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>配車カレンダー</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--panel:#161b22;--card:#1c2330;--border:#30363d;
+  --accent:#f0b429;--text:#e6edf3;--text-sub:#8b949e;
+  --green:#3fb950;--red:#f85149;--blue:#58a6ff;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Noto Sans JP',sans-serif;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;}
+input,button,select{font-family:'Noto Sans JP',sans-serif;-webkit-appearance:none;appearance:none;}
+select{background-image:none}
+
+/* ===== SETUP SCREEN ===== */
+.setup{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;gap:22px;z-index:900}
+.setup.hidden{display:none}
+.setup-logo{font-size:60px;animation:bounce 2s infinite}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.setup-title{font-family:'Oswald',sans-serif;font-size:26px;font-weight:700;color:var(--accent);letter-spacing:3px;text-align:center}
+.setup-sub{font-size:13px;color:var(--text-sub);text-align:center;line-height:1.75}
+.setup-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;display:flex;flex-direction:column;gap:10px}
+.setup-lbl{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--text-sub);text-transform:uppercase}
+.setup-inp{width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:13px 12px;color:var(--text);font-size:15px;outline:none}
+.setup-inp:focus{border-color:var(--accent)}
+.setup-hint{font-size:11px;color:var(--text-sub);line-height:1.7}
+.setup-hint a{color:var(--blue);text-decoration:none}
+.btn-start{width:100%;padding:15px;background:var(--accent);color:#000;border:none;border-radius:11px;font-family:'Oswald',sans-serif;font-size:17px;font-weight:700;letter-spacing:2px;cursor:pointer}
+.btn-start:active{opacity:0.8}
+
+/* ===== MAIN SCREEN ===== */
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg)}
+.screen.hidden{display:none}
+.header{background:var(--panel);border-bottom:2px solid var(--accent);padding-top:var(--safe-top);height:calc(52px + var(--safe-top));display:flex;align-items:flex-end;padding-bottom:10px;padding-left:16px;padding-right:16px;gap:10px;flex-shrink:0;}
+.header-title{font-family:'Oswald',sans-serif;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent)}
+.ai-badge{margin-left:auto;background:rgba(240,180,41,0.12);border:1px solid rgba(240,180,41,0.35);border-radius:20px;padding:3px 9px;font-size:10px;color:var(--accent);font-weight:700}
+
+.tab-content{flex:1;overflow:hidden;position:relative;min-height:0}
+.tab-pane{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}
+.tab-pane.hidden{display:none}
+.tab-bar{display:flex;background:var(--panel);border-top:1px solid var(--border);padding-bottom:var(--safe-bot);flex-shrink:0;}
+.tab-btn{flex:1;padding:10px 0 8px;background:none;border:none;color:var(--text-sub);font-size:10px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+.tab-btn .ti{font-size:22px;line-height:1}
+.tab-btn.active{color:var(--accent)}
+
+/* ===== SCAN ===== */
+.scan-pane{padding:14px;display:flex;flex-direction:column;gap:12px}
+.img-zone{background:var(--panel);border:2px dashed var(--border);border-radius:12px;min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;overflow:hidden;transition:border-color 0.2s;}
+.img-zone.has-img{border-style:solid;border-color:var(--border)}
+.placeholder{display:flex;flex-direction:column;align-items:center;gap:6px;padding:24px;text-align:center;pointer-events:none}
+.preview{width:100%;max-height:220px;object-fit:contain;display:block}
+
+/* 解析中オーバーレイ */
+.analyzing{display:none;position:absolute;inset:0;background:rgba(13,17,23,0.88);flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.analyzing.show{display:flex}
+.analyzing-txt{font-size:13px;color:var(--text-sub)}
+.spin-lg{width:36px;height:36px;border:3px solid rgba(240,180,41,0.2);border-top-color:var(--accent);border-radius:50%;animation:sp 0.8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+.btn-row{display:flex;gap:10px}
+.btn-h{flex:1;padding:13px 0;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-h.pri{background:var(--accent);color:#000}
+.btn-h.sec{background:var(--panel);color:var(--text);border:1px solid var(--border)}
+.btn-h:active{opacity:0.75}
+
+.btn-analyze{width:100%;padding:14px;background:var(--accent);color:#000;border:none;border-radius:10px;font-family:'Oswald',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;}
+.btn-analyze:disabled{background:#252525;color:var(--text-sub);cursor:not-allowed}
+.btn-analyze:not(:disabled):active{opacity:0.8}
+.spin-sm{width:18px;height:18px;border:2px solid rgba(0,0,0,0.2);border-top-color:#000;border-radius:50%;animation:sp 0.7s linear infinite;flex-shrink:0}
+
+/* 結果フォーム */
+.res-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.res-sec{border-bottom:1px solid var(--border)}
+.res-sec:last-child{border-bottom:none}
+.res-hd{padding:8px 14px;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;display:flex;align-items:center;gap:6px}
+.res-hd.ld{background:rgba(63,185,80,0.12);color:var(--green)}
+.res-hd.ul{background:rgba(248,81,73,0.12);color:var(--red)}
+.res-fld{padding:9px 14px;border-top:1px solid var(--border)}
+.res-fld:first-of-type{border-top:none}
+.fld-lbl{font-size:10px;color:var(--text-sub);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px}
+.dt-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.fi{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:9px 10px;color:var(--text);font-size:14px;outline:none}
+.fi:focus{border-color:var(--accent)}
+.fi.fd{flex:1;min-width:128px}
+.fi.ft{width:88px}
+.fi.fa{width:74px;cursor:pointer}
+.fi-full{width:100%;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:9px 10px;color:var(--text);font-size:14px;outline:none}
+.fi-full:focus{border-color:var(--accent)}
+.fld-hint{font-size:11px;color:var(--text-sub);margin-top:4px}
+
+#resultArea{display:none;flex-direction:column;gap:12px}
+.btn-reg{width:100%;padding:14px;background:var(--green);color:#000;border:none;border-radius:10px;font-family:'Oswald',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer}
+.btn-reg:active{opacity:0.8}
+.btn-can{width:100%;padding:10px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text-sub);font-size:14px;cursor:pointer}
+
+/* ===== CALENDAR ===== */
+.cal-pane{padding:12px}
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.cal-lbl{font-family:'Oswald',sans-serif;font-size:22px;font-weight:700;letter-spacing:2px}
+.cal-arr{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;width:38px;height:38px;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.cal-stats{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.chip{background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:11px;display:flex;align-items:center;gap:5px}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.wdays{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:4px}
+.wd{text-align:center;font-size:11px;font-weight:700;color:var(--text-sub);padding:4px 0}
+.wd.su{color:var(--red)}.wd.sa{color:var(--blue)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.dcell{background:var(--panel);border:1px solid var(--border);border-radius:8px;min-height:54px;padding:5px 4px;cursor:pointer;transition:border-color 0.15s}
+.dcell:active{border-color:var(--accent)}
+.dcell.other{opacity:0.22}
+.dcell.today{border-color:var(--accent)}
+.dcell.today .dnum{color:var(--accent);font-weight:700}
+.dcell.sun .dnum{color:var(--red)}
+.dcell.sat .dnum{color:var(--blue)}
+.dnum{font-family:'Oswald',sans-serif;font-size:13px;margin-bottom:3px;text-align:center}
+.ddots{display:flex;flex-wrap:wrap;gap:3px;justify-content:center}
+.ddot{width:7px;height:7px;border-radius:50%}
+.ddot.load{background:var(--green)}
+.ddot.unload{background:var(--red)}
+
+/* ===== MODAL ===== */
+.m-ov{position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:500;display:flex;align-items:flex-end;backdrop-filter:blur(4px);padding-bottom:var(--safe-bot)}
+.m-ov.hidden{display:none}
+.m-box{background:var(--panel);border-radius:16px 16px 0 0;width:100%;max-height:80vh;overflow-y:auto;animation:su 0.25s ease}
+@keyframes su{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.m-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:12px auto 0}
+.m-hd{padding:14px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.m-title{font-family:'Oswald',sans-serif;font-size:17px;font-weight:600;letter-spacing:1px}
+.m-body{padding:16px 20px;display:flex;flex-direction:column;gap:12px}
+.m-foot{padding:12px 20px 20px;display:flex;gap:8px}
+.btn-mdel{flex:1;padding:12px;background:rgba(248,81,73,0.12);color:var(--red);border:1px solid var(--red);border-radius:8px;font-size:14px;font-weight:700;cursor:pointer}
+.btn-mcl{flex:1;padding:12px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px;cursor:pointer}
+.ico-btn{background:none;border:none;color:var(--text-sub);font-size:22px;padding:4px;cursor:pointer;line-height:1}
+
+/* ===== SETTINGS ===== */
+.set-pane{padding:18px;display:flex;flex-direction:column;gap:14px}
+.set-sec{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.set-row{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:5px}
+.set-row:last-child{border-bottom:none}
+.set-lbl{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-sub);text-transform:uppercase}
+.set-val{font-size:14px;color:var(--text)}
+.set-inp{background:transparent;border:none;color:var(--text);font-size:14px;width:100%;outline:none;padding:2px 0}
+.set-inp:focus{border-bottom:1px solid var(--accent)}
+.set-note{font-size:12px;color:var(--text-sub);line-height:1.75}
+.btn-save{width:100%;padding:12px;background:var(--accent);color:#000;border:none;border-radius:10px;font-family:'Oswald',sans-serif;font-size:15px;font-weight:700;letter-spacing:2px;cursor:pointer}
+.btn-save:active{opacity:0.8}
+.btn-dng{width:100%;padding:12px;background:transparent;color:var(--red);border:1px solid var(--red);border-radius:10px;font-size:14px;cursor:pointer}
+
+/* ホーム画面追加ガイド */
+.guide-box{background:rgba(88,166,255,0.07);border:1px solid rgba(88,166,255,0.2);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.guide-title{font-size:13px;font-weight:700;color:var(--blue)}
+.guide-step{display:flex;gap:10px;align-items:flex-start}
+.gs-num{width:22px;height:22px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.gs-txt{font-size:12px;color:var(--text-sub);line-height:1.65}
+.gs-txt b{color:var(--text)}
+.gs-txt .warn{color:var(--red);font-size:11px}
+
+/* ===== TOAST ===== */
+.toast{position:fixed;bottom:calc(76px + var(--safe-bot));left:12px;right:12px;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:500;z-index:600;border:1px solid;word-break:break-all;animation:ti 0.3s ease}
+@keyframes ti{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.toast.ok{background:rgba(63,185,80,0.15);border-color:var(--green);color:var(--green)}
+.toast.ng{background:rgba(248,81,73,0.15);border-color:var(--red);color:var(--red)}
+.toast.inf{background:rgba(88,166,255,0.15);border-color:var(--blue);color:var(--blue)}
+.toast.hidden{display:none}
+</style>
+</head>
+<body>
+
+<!-- ===== SETUP SCREEN ===== -->
+<div class="setup" id="setupScreen">
+  <div class="setup-logo">🚚</div>
+  <div>
+    <div class="setup-title">配車カレンダー</div>
+    <div class="setup-sub" style="margin-top:6px">配車書類を写真で読み取り<br>カレンダーに自動登録</div>
+  </div>
+  <div class="setup-card">
+    <div class="setup-lbl">Gemini API キー</div>
+    <input class="setup-inp" type="password" id="setupKey" placeholder="AIza..." autocomplete="off" autocorrect="off" spellcheck="false">
+    <div class="setup-hint">
+      <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com</a> で無料取得できます（Google アカウント必要）。<br>キーはこの端末内にのみ保存されます。取得したキーをそのまま貼り付けてください。
+    </div>
+  </div>
+  <button class="btn-start" onclick="startApp()">はじめる →</button>
+</div>
+
+<!-- ===== MAIN SCREEN ===== -->
+<div class="screen hidden" id="mainScreen">
+  <div class="header">
+    <span style="font-size:22px">🚚</span>
+    <span class="header-title">配車カレンダー</span>
+    <span class="ai-badge">✨ Gemini AI</span>
+  </div>
+
+  <div class="tab-content">
+
+    <!-- 読み取りタブ -->
+    <div class="tab-pane scan-pane" id="tabScan">
+
+      <input type="file" id="filePick" accept="image/*"                       style="display:none" onchange="onFile(this)">
+      <input type="file" id="fileCam"  accept="image/*" capture="environment" style="display:none" onchange="onFile(this)">
+
+      <div class="img-zone" id="imgZone">
+        <div class="placeholder" id="pholder">
+          <div style="font-size:44px">📄</div>
+          <div style="font-size:15px;font-weight:700;color:var(--text);margin-top:4px">配車書類を撮影 / 選択</div>
+          <div style="font-size:12px;color:var(--text-sub);margin-top:4px">手配書・依頼書・指示書など対応</div>
+        </div>
+        <div class="analyzing" id="analyzing">
+          <div class="spin-lg"></div>
+          <div class="analyzing-txt" id="analyzingTxt">Gemini AIが読み取り中...</div>
+        </div>
+        <img id="prevImg" class="preview" style="display:none">
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-h sec" onclick="document.getElementById('fileCam').click()">📷 カメラ</button>
+        <button class="btn-h pri" onclick="document.getElementById('filePick').click()">📂 ライブラリ</button>
+      </div>
+
+      <button class="btn-analyze" id="analyzeBtn" onclick="analyze()" disabled>
+        ✨ Gemini AIで読み取る
+      </button>
+
+      <div id="resultArea" style="display:none">
+        <div class="res-card">
+          <!-- 積み込み -->
+          <div class="res-sec">
+            <div class="res-hd ld">🟢 積み込み</div>
+            <div class="res-fld">
+              <div class="fld-lbl">日付・時刻</div>
+              <div class="dt-row">
+                <input class="fi fd" type="date"   id="f_load_date">
+                <input class="fi ft" type="time"   id="f_load_time">
+                <select class="fi fa"              id="f_load_ampm">
+                  <option value="">時刻</option>
+                  <option value="AM">AM</option>
+                  <option value="PM">PM</option>
+                </select>
+              </div>
+              <div class="fld-hint">※ AM/PMのみ記載の場合は右で選択</div>
+            </div>
+            <div class="res-fld">
+              <div class="fld-lbl">場所・会社名</div>
+              <input class="fi-full" id="f_load_loc" placeholder="会社名・住所（手動入力も可）">
+            </div>
+          </div>
+          <!-- 荷下ろし -->
+          <div class="res-sec">
+            <div class="res-hd ul">🔴 荷下ろし</div>
+            <div class="res-fld">
+              <div class="fld-lbl">日付・時刻</div>
+              <div class="dt-row">
+                <input class="fi fd" type="date"   id="f_unload_date">
+                <input class="fi ft" type="time"   id="f_unload_time">
+                <select class="fi fa"              id="f_unload_ampm">
+                  <option value="">時刻</option>
+                  <option value="AM">AM</option>
+                  <option value="PM">PM</option>
+                </select>
+              </div>
+              <div class="fld-hint">※ AM/PMのみ記載の場合は右で選択</div>
+            </div>
+            <div class="res-fld">
+              <div class="fld-lbl">場所・会社名</div>
+              <input class="fi-full" id="f_unload_loc" placeholder="会社名・住所（手動入力も可）">
+            </div>
+          </div>
+        </div>
+        <button class="btn-reg" onclick="register()">📅 カレンダーに登録する</button>
+        <button class="btn-can" onclick="clearScan()">キャンセル</button>
+      </div>
+
+    </div><!-- /scan -->
+
+    <!-- カレンダータブ -->
+    <div class="tab-pane hidden cal-pane" id="tabCal">
+      <div class="cal-nav">
+        <button class="cal-arr" onclick="chMon(-1)">‹</button>
+        <div class="cal-lbl" id="calLbl"></div>
+        <button class="cal-arr" onclick="chMon(1)">›</button>
+      </div>
+      <div class="cal-stats" id="calStats"></div>
+      <div class="wdays">
+        <div class="wd su">日</div><div class="wd">月</div><div class="wd">火</div>
+        <div class="wd">水</div><div class="wd">木</div><div class="wd">金</div>
+        <div class="wd sa">土</div>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+
+    <!-- 設定タブ -->
+    <div class="tab-pane hidden set-pane" id="tabSettings">
+
+      <div class="guide-box">
+        <div class="guide-title">📱 ホーム画面への追加方法（iPhone）</div>
+        <div class="guide-step"><div class="gs-num">1</div><div class="gs-txt"><b>Safari</b> でこのページを開く<br><span class="warn">※ Chrome・LINEブラウザ等は不可</span></div></div>
+        <div class="guide-step"><div class="gs-num">2</div><div class="gs-txt">画面下部の <b>共有ボタン（□↑）</b> をタップ</div></div>
+        <div class="guide-step"><div class="gs-num">3</div><div class="gs-txt"><b>「ホーム画面に追加」</b> を選択 → <b>「追加」</b></div></div>
+        <div style="font-size:11px;color:var(--text-sub);padding-left:32px;line-height:1.7">アイコンから起動後もAPIキーは保持されます</div>
+      </div>
+
+      <div class="set-sec">
+        <div class="set-row">
+          <div class="set-lbl">Gemini API キー</div>
+          <input class="set-inp" type="password" id="settingsKey" placeholder="AIza..." autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+      <button class="btn-save" onclick="saveKey()">保存する</button>
+
+      <div class="set-sec">
+        <div class="set-row">
+          <div class="set-lbl">AI エンジン</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:4px 0">
+            <span style="font-size:22px">✨</span>
+            <div>
+              <div class="set-val">Gemini 2.5 Flash</div>
+              <div style="font-size:11px;color:var(--text-sub)">無料枠：1日1500回 / 月額0円</div>
+            </div>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-lbl">画像圧縮</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
+            <div>
+              <div class="set-val">長辺 <span id="maxPxLabel">1200</span>px / JPEG 85%</div>
+              <div style="font-size:11px;color:var(--text-sub)">API送信量を約1/30に削減</div>
+            </div>
+          </div>
+          <input type="range" id="maxPxSlider" min="800" max="2000" step="200" value="1200"
+            style="width:100%;accent-color:var(--accent);margin-top:6px"
+            oninput="updateMaxPx(this.value)">
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-sub);margin-top:2px">
+            <span>800px<br>高節約</span><span style="text-align:center">1200px<br>推奨</span><span style="text-align:right">2000px<br>高精度</span>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-lbl">本日の使用回数</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
+            <div>
+              <div class="set-val"><span id="todayCount">0</span> 回 <span style="font-size:11px;color:var(--text-sub)">/ 1500回</span></div>
+              <div style="height:6px;background:var(--card);border-radius:3px;margin-top:6px;overflow:hidden;width:200px">
+                <div id="usageBar" style="height:100%;background:var(--green);border-radius:3px;width:0%;transition:width 0.3s"></div>
+              </div>
+            </div>
+            <button onclick="resetCount()" style="padding:6px 12px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-sub);font-size:11px;cursor:pointer">リセット</button>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-lbl">対応書類</div>
+          <div class="set-note">
+            配車依頼書 / 手配書 / 輸送依頼書<br>
+            輸送指示書 / チャーター便手配依頼書<br>
+            ※ 手書き・印刷どちらも対応
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-lbl">データ</div>
+          <div class="set-note">登録済みイベント：<span id="evCount">0</span> 件</div>
+        </div>
+      </div>
+      <button onclick="addTestEvent()" style="width:100%;padding:12px;background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:10px;font-size:14px;cursor:pointer;margin-bottom:8px">📅 今日にテストイベントを追加（動作確認用）</button>
+      <button class="btn-dng" onclick="deleteAll()">全データを削除する</button>
+    </div>
+
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tBtn0" onclick="sw(0)"><span class="ti">📸</span>読み取り</button>
+    <button class="tab-btn"        id="tBtn1" onclick="sw(1)"><span class="ti">📅</span>カレンダー</button>
+    <button class="tab-btn"        id="tBtn2" onclick="sw(2)"><span class="ti">⚙️</span>設定</button>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="m-ov hidden" id="mOv" onclick="closeMod()">
+  <div class="m-box" onclick="event.stopPropagation()">
+    <div class="m-handle"></div>
+    <div class="m-hd">
+      <div class="m-title" id="mTitle"></div>
+      <button class="ico-btn" onclick="closeMod()">×</button>
+    </div>
+    <div class="m-body" id="mBody"></div>
+    <div class="m-foot" id="mFoot">
+      <button class="btn-mdel" onclick="delCurEv()">削除</button>
+      <button class="btn-mcl"  onclick="closeMod()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast hidden" id="toast"></div>
+
+<script>
+// ===== 超シンプル・堅牢な実装 =====
+(function(){
+'use strict';
+
+// ===== ユーティリティ =====
+function G(id){ return document.getElementById(id); }
+function safeRun(fn){ try{ fn(); }catch(e){ console.warn(e); } }
+
+// ===== STATE =====
+var evs=[], calY=new Date().getFullYear(), calM=new Date().getMonth();
+var curFile=null, curB64=null, curMime=null, curEvId=null, toastTmr=null;
+var MAX_PX=1200;
+
+// ===== データ =====
+function loadEvs(){ try{ evs=JSON.parse(localStorage.getItem('hev')||'[]'); }catch(e){ evs=[]; } }
+function saveEvs(){ safeRun(function(){ localStorage.setItem('hev',JSON.stringify(evs)); updCount(); }); }
+function updCount(){ safeRun(function(){ var el=G('evCount'); if(el) el.textContent=evs.length; }); }
+
+// ===== トースト =====
+function toast(msg, type){
+  type = type||'ok';
+  safeRun(function(){
+    var t=G('toast');
+    if(!t) return;
+    t.textContent=msg;
+    t.className='toast '+type;
+    clearTimeout(toastTmr);
+    toastTmr=setTimeout(function(){ t.className='toast hidden'; },4000);
+  });
+}
+
+// ===== セットアップエラー表示 =====
+function setupErr(msg){
+  safeRun(function(){
+    var el=G('setupErrMsg');
+    if(!el){
+      el=document.createElement('div');
+      el.id='setupErrMsg';
+      el.style.cssText='width:100%;padding:10px 14px;background:rgba(248,81,73,0.15);border:1px solid #f85149;border-radius:8px;color:#f85149;font-size:13px;text-align:center;margin-bottom:8px';
+      var btn=G('setupScreen').querySelector('.btn-start');
+      if(btn) G('setupScreen').insertBefore(el, btn);
+      else G('setupScreen').appendChild(el);
+    }
+    el.textContent=msg;
+    el.style.display='block';
+    clearTimeout(el._tmr);
+    el._tmr=setTimeout(function(){ el.style.display='none'; },3000);
+  });
+}
+
+// ===== はじめるボタン =====
+window.startApp = function(){
+  safeRun(function(){
+    var inp=G('setupKey');
+    var key=inp ? inp.value.trim() : '';
+    if(!key){
+      setupErr('APIキーを入力してください');
+      return;
+    }
+    localStorage.setItem('gemini_key', key);
+    showMain();
+  });
+};
+
+// ===== メイン画面へ =====
+function showMain(){
+  safeRun(function(){ G('setupScreen').classList.add('hidden'); });
+  safeRun(function(){ G('mainScreen').classList.remove('hidden'); });
+  safeRun(function(){
+    var key=localStorage.getItem('gemini_key')||'';
+    var sk=G('settingsKey'); if(sk) sk.value=key;
+  });
+  safeRun(function(){
+    ['load','unload'].forEach(function(p){
+      var ae=G('f_'+p+'_ampm'), te=G('f_'+p+'_time');
+      if(ae) ae.addEventListener('change',function(){
+        if(this.value){ if(te){te.value='';te.disabled=true;} }
+        else{ if(te) te.disabled=false; }
+      });
+      if(te) te.addEventListener('input',function(){
+        if(this.value && ae) ae.value='';
+      });
+    });
+  });
+  safeRun(function(){
+    var px=parseInt(localStorage.getItem('max_px')||'1200');
+    MAX_PX=px;
+    var sl=G('maxPxSlider'); if(sl) sl.value=px;
+    var lb=G('maxPxLabel'); if(lb) lb.textContent=px;
+  });
+  safeRun(renderCal);
+  safeRun(updCount);
+  safeRun(updateUsageUI);
+}
+
+// ===== 設定保存 =====
+window.saveKey = function(){
+  safeRun(function(){
+    var key=G('settingsKey').value.trim();
+    if(!key){ toast('キーを入力してください','ng'); return; }
+    localStorage.setItem('gemini_key',key);
+    toast('✅ 保存しました','ok');
+  });
+};
+
+window.updateMaxPx = function(val){
+  safeRun(function(){
+    MAX_PX=parseInt(val);
+    localStorage.setItem('max_px',val);
+    var lb=G('maxPxLabel'); if(lb) lb.textContent=val;
+  });
+};
+
+// ===== ファイル選択＋圧縮 =====
+window.onFile = function(inp){
+  safeRun(function(){
+    var f=inp.files[0]; if(!f) return;
+    curFile=f;
+    var reader=new FileReader();
+    reader.onload=function(e){
+      safeRun(function(){
+        var img=new Image();
+        img.onload=function(){
+          safeRun(function(){
+            var MAX=MAX_PX, w=img.width, h=img.height;
+            if(w>MAX||h>MAX){
+              if(w>=h){ h=Math.round(h*MAX/w); w=MAX; }
+              else    { w=Math.round(w*MAX/h); h=MAX; }
+            }
+            var cv=document.createElement('canvas');
+            cv.width=w; cv.height=h;
+            var ctx=cv.getContext('2d');
+            ctx.filter='contrast(1.25) brightness(1.05)';
+            ctx.drawImage(img,0,0,w,h);
+            ctx.filter='none';
+            var compressed=cv.toDataURL('image/jpeg',0.88);
+            curB64=compressed.split(',')[1];
+            curMime='image/jpeg';
+            var origKB=Math.round(f.size/1024);
+            var compKB=Math.round(curB64.length*0.75/1024);
+            toast('📦 圧縮完了 '+origKB+'KB → '+compKB+'KB','inf');
+            var pi=G('prevImg');
+            pi.src=compressed; pi.style.display='block';
+            G('pholder').style.display='none';
+            G('analyzing').classList.remove('show');
+            G('analyzeBtn').disabled=false;
+            G('resultArea').style.display='none';
+            G('imgZone').classList.add('has-img');
+          });
+        };
+        img.src=e.target.result;
+      });
+    };
+    reader.readAsDataURL(f);
+  });
+};
+
+// ===== Gemini解析 =====
+window.analyze = function(){
+  if(!curB64) return;
+  var key=localStorage.getItem('gemini_key');
+  if(!key){ toast('APIキーが設定されていません','ng'); return; }
+  var btn=G('analyzeBtn');
+  btn.disabled=true;
+  btn.innerHTML='<div class="spin-sm"></div> 読み取り中...';
+  G('prevImg').style.display='none';
+  G('analyzing').classList.add('show');
+
+  var prompt='あなたは日本の物流・運送業の書類を読み取るAIです。\n画像から積み込みと荷下ろしの情報を抽出し、以下のJSONのみを返してください。\nマークダウン・コードブロック・説明文は一切不要です。JSONのみ。\n\n{"load":{"date":"","time":"","ampm":"","location":"","company":""},"unload":{"date":"","time":"","ampm":"","location":"","company":""}}\n\n━━━ load（積み込み）━━━\n対象:「積日」「積込日」「積地」「引取」「引取先」「引取日」「集荷」「持込先」「持込日」\ndate: YYYY-MM-DD。令和8年=2026年（令和元年=2019年）\ntime: HH:mm。「16時00分まで」→16:00、「11:00〜13:00」→11:00、「AM11:00まで」→11:00でampmは空\nampm: 時刻不明でAM/PMのみの場合。両方記載は「AM」優先\nlocation: 住所（都道府県〜番地）\ncompany: 会社名・施設名\n\n━━━ unload（荷下ろし）━━━\n対象:「卸日」「荷卸」「納品日」「納品先」「配達日」「搬入」\n同じルールを適用\n\n不明は空文字。AMとPMは半角大文字。JSONのみ返答。';
+
+  fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='+key, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      contents:[{parts:[
+        {inline_data:{mime_type:curMime,data:curB64}},
+        {text:prompt}
+      ]}],
+      generationConfig:{temperature:0,maxOutputTokens:1024}
+    })
+  })
+  .then(function(res){ return res.json().then(function(d){ return {ok:res.ok,data:d}; }); })
+  .then(function(r){
+    if(!r.ok) throw new Error(r.data&&r.data.error?r.data.error.message:'API error');
+    var raw=(r.data.candidates&&r.data.candidates[0]&&r.data.candidates[0].content&&r.data.candidates[0].content.parts&&r.data.candidates[0].content.parts[0]?r.data.candidates[0].content.parts[0].text||'':'');
+    var parsed={load:{date:'',time:'',ampm:'',location:'',company:''},unload:{date:'',time:'',ampm:'',location:'',company:''}};
+    safeRun(function(){
+      var txt=raw.replace(/```[a-zA-Z]*/g,'').replace(/```/g,'').replace(/｛/g,'{').replace(/｝/g,'}').replace(/\u201c/g,'"').replace(/\u201d/g,'"').trim();
+      var s=txt.indexOf('{'), e=txt.lastIndexOf('}');
+      if(s<0||e<=s) return;
+      var json=txt.slice(s,e+1).replace(/("(?:[^"\\]|\\.)*")/g,function(m){ return m.replace(/\n/g,' ').replace(/\r/g,'').replace(/[\x00-\x1F]/g,''); });
+      var tmp=JSON.parse(json);
+      ['load','unload'].forEach(function(k){
+        if(!tmp[k]) return;
+        if(tmp[k].time && tmp[k].ampm) tmp[k].ampm='';
+        var ap=(tmp[k].ampm||'').toUpperCase();
+        if(ap==='AM'||ap==='PM') tmp[k].ampm=ap; else tmp[k].ampm='';
+      });
+      parsed=tmp;
+    });
+    fillForm('load',   parsed.load);
+    fillForm('unload', parsed.unload);
+    G('analyzing').classList.remove('show');
+    G('prevImg').style.display='block';
+    G('resultArea').style.display='flex';
+    countUp();
+    var ld=!!(parsed.load&&parsed.load.date), ul=!!(parsed.unload&&parsed.unload.date);
+    if(ld&&ul)      toast('📋 読み取り完了！内容をご確認ください','ok');
+    else if(ld||ul) toast('⚠️ 一部読み取れませんでした。確認・補完してください','inf');
+    else            toast('❌ 日付を読み取れませんでした。手動入力してください','ng');
+  })
+  .catch(function(e){
+    G('analyzing').classList.remove('show');
+    G('prevImg').style.display='block';
+    G('resultArea').style.display='flex';
+    var msg=e.message||'';
+    if(msg.indexOf('401')>=0||msg.indexOf('API_KEY')>=0) toast('APIキーが無効です。設定タブで確認してください','ng');
+    else if(msg.indexOf('429')>=0) toast('⏱️ 1分後にもう一度お試しください','ng');
+    else toast('読み取りエラー: '+msg.slice(0,50),'ng');
+  })
+  .finally(function(){
+    btn.disabled=false;
+    btn.innerHTML='✨ Gemini AIで読み取る';
+  });
+};
+
+function fillForm(pfx,d){
+  if(!d) return;
+  safeRun(function(){
+    G('f_'+pfx+'_date').value=d.date||'';
+    var ap=(d.ampm||'').toUpperCase();
+    var te=G('f_'+pfx+'_time'), ae=G('f_'+pfx+'_ampm');
+    if(ap==='AM'||ap==='PM'){ te.value=''; te.disabled=true; ae.value=ap; }
+    else{ te.disabled=false; ae.value=''; te.value=d.time||''; }
+    G('f_'+pfx+'_loc').value=[d.company,d.location].filter(Boolean).join(' ');
+  });
+}
+
+// ===== 登録 =====
+function getDt(pfx){
+  var d=G('f_'+pfx+'_date').value, t=G('f_'+pfx+'_time').value, a=G('f_'+pfx+'_ampm').value;
+  if(!d) return null;
+  if(a) return d+' '+a;
+  if(t) return d+'T'+t;
+  return d;
+}
+window.register = function(){
+  safeRun(function(){
+    var lDt=getDt('load'),   lLoc=G('f_load_loc').value;
+    var uDt=getDt('unload'), uLoc=G('f_unload_loc').value;
+    var ne=[];
+    if(lDt) ne.push({id:Date.now()+'l',type:'load',  datetime:lDt,location:lLoc});
+    if(uDt) ne.push({id:Date.now()+'u',type:'unload',datetime:uDt,location:uLoc});
+    if(!ne.length){ toast('日付を入力してください','ng'); return; }
+    evs=evs.concat(ne);
+    saveEvs(); clearScan();
+    var rd=new Date(ne[0].datetime.replace(/ AM| PM/,''));
+    if(!isNaN(rd)){ calY=rd.getFullYear(); calM=rd.getMonth(); }
+    renderCal();
+    toast('✅ '+ne.length+'件を登録しました','ok');
+    sw(1);
+  });
+};
+
+window.clearScan = function(){
+  safeRun(function(){
+    G('resultArea').style.display='none';
+    G('prevImg').style.display='none'; G('prevImg').src='';
+    G('pholder').style.display='flex';
+    G('analyzing').classList.remove('show');
+    G('imgZone').classList.remove('has-img');
+    G('analyzeBtn').disabled=true;
+    G('analyzeBtn').innerHTML='✨ Gemini AIで読み取る';
+    curFile=null; curB64=null;
+    ['load','unload'].forEach(function(p){
+      ['date','time','loc'].forEach(function(f){ var el=G('f_'+p+'_f'.replace('f',f)); if(el){el.value='';el.disabled=false;} });
+      var ae=G('f_'+p+'_ampm'); if(ae) ae.value='';
+    });
+    G('filePick').value=''; G('fileCam').value='';
+  });
+};
+
+// clearScanのフィールドリセット修正版
+window.clearScan = function(){
+  safeRun(function(){
+    G('resultArea').style.display='none';
+    var pi=G('prevImg'); pi.style.display='none'; pi.src='';
+    G('pholder').style.display='flex';
+    G('analyzing').classList.remove('show');
+    G('imgZone').classList.remove('has-img');
+    var ab=G('analyzeBtn'); ab.disabled=true; ab.innerHTML='✨ Gemini AIで読み取る';
+    curFile=null; curB64=null;
+    ['load','unload'].forEach(function(p){
+      var d=G('f_'+p+'_date'); if(d){d.value='';d.disabled=false;}
+      var t=G('f_'+p+'_time'); if(t){t.value='';t.disabled=false;}
+      var a=G('f_'+p+'_ampm'); if(a) a.value='';
+      var l=G('f_'+p+'_loc');  if(l) l.value='';
+    });
+    G('filePick').value=''; G('fileCam').value='';
+  });
+};
+
+// ===== カレンダー =====
+window.chMon = function(d){
+  calM+=d;
+  if(calM<0){calM=11;calY--;} if(calM>11){calM=0;calY++;}
+  renderCal();
+};
+
+function renderCal(){
+  var lbl=G('calLbl'); if(lbl) lbl.textContent=calY+'年'+(calM+1)+'月';
+  var lc=evs.filter(function(e){return e.type==='load';}).length;
+  var uc=evs.filter(function(e){return e.type==='unload';}).length;
+  var st=G('calStats');
+  if(st) st.innerHTML='<div class="chip"><div class="dot" style="background:var(--green)"></div>積み込み '+lc+'件</div><div class="chip"><div class="dot" style="background:var(--red)"></div>荷下ろし '+uc+'件</div>';
+  var f=new Date(calY,calM,1), l=new Date(calY,calM+1,0), td=new Date();
+  var g=G('calGrid'); if(!g) return;
+  g.innerHTML='';
+  for(var i=0;i<f.getDay();i++) g.appendChild(mkCell(new Date(calY,calM,i-f.getDay()+1),false,td));
+  for(var d=1;d<=l.getDate();d++) g.appendChild(mkCell(new Date(calY,calM,d),true,td));
+  var t=1; while(g.children.length%7!==0) g.appendChild(mkCell(new Date(calY,calM+1,t++),false,td));
+}
+
+function evDate(ev){ return new Date((ev.datetime||'').replace(/ AM| PM/,'')); }
+
+function mkCell(date,cur,td){
+  var c=document.createElement('div'), dw=date.getDay();
+  var isT=date.toDateString()===td.toDateString();
+  c.className='dcell'+(!cur?' other':'')+(isT?' today':'')+(dw===0?' sun':dw===6?' sat':'');
+  var de=evs.filter(function(e){ var d=evDate(e); return !isNaN(d)&&d.toDateString()===date.toDateString(); });
+  c.innerHTML='<div class="dnum">'+date.getDate()+'</div><div class="ddots">'+de.map(function(e){ return '<div class="ddot '+e.type+'"></div>'; }).join('')+'</div>';
+  if(de.length) c.addEventListener('click',function(){ openMod(date,de); });
+  return c;
+}
+
+function fmtTime(ev){
+  var dt=ev.datetime||'';
+  if(dt.indexOf(' AM')>=0) return 'AM（午前）';
+  if(dt.indexOf(' PM')>=0) return 'PM（午後）';
+  var d=new Date(dt);
+  if(!isNaN(d)&&dt.indexOf('T')>=0) return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+  return '時刻未定';
+}
+
+// ===== モーダル =====
+function openMod(date,de){
+  safeRun(function(){
+    G('mTitle').textContent='📅 '+(date.getMonth()+1)+'月'+date.getDate()+'日';
+    G('mBody').innerHTML=de.map(function(ev){
+      var col=ev.type==='load'?'var(--green)':'var(--red)';
+      var lbl=ev.type==='load'?'🟢 積み込み':'🔴 荷下ろし';
+      return '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px">'
+        +'<div style="font-size:13px;font-weight:700;color:'+col+'">'+lbl+'</div>'
+        +'<div style="display:flex;gap:10px"><span style="font-size:20px">🕐</span><div><div style="font-size:10px;color:var(--text-sub)">時刻</div><div style="font-size:15px">'+fmtTime(ev)+'</div></div></div>'
+        +'<div style="display:flex;gap:10px"><span style="font-size:20px">📍</span><div><div style="font-size:10px;color:var(--text-sub)">場所</div><div style="font-size:14px;line-height:1.6">'+(ev.location||'—')+'</div></div></div>'
+        +'<div style="border-top:1px solid var(--border);padding-top:10px">'
+        +'<div style="font-size:10px;color:var(--text-sub);margin-bottom:8px">カレンダーに追加</div>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+        +'<button onclick="exportIcs(\''+ev.id+'\')" style="padding:11px 6px;background:rgba(88,166,255,0.15);color:var(--blue);border:1px solid var(--blue);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;line-height:1.5">📲 iPhone<br>カレンダー</button>'
+        +'<button onclick="exportGcal(\''+ev.id+'\')" style="padding:11px 6px;background:rgba(63,185,80,0.15);color:var(--green);border:1px solid var(--green);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;line-height:1.5">📅 Google<br>カレンダー</button>'
+        +'</div>'
+        +'<button onclick="delEv(\''+ev.id+'\')" style="width:100%;padding:9px;background:rgba(248,81,73,0.1);color:var(--red);border:1px solid var(--red);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🗑 削除</button>'
+        +'</div></div>';
+    }).join('');
+    if(de.length>1){
+      G('mFoot').style.display='flex';
+      G('mFoot').innerHTML=''
+        +'<button onclick=\'exportIcsMulti('+JSON.stringify(de.map(function(e){return e.id;}))+')\'' style="flex:1;padding:12px 4px;background:rgba(88,166,255,0.15);color:var(--blue);border:1px solid var(--blue);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;line-height:1.4">📲 iPhoneへ<br><span style="font-size:10px">全'+de.length+'件まとめて</span></button>'
+        +'<button onclick=\'exportGcalMulti('+JSON.stringify(de.map(function(e){return e.id;}))+')\'' style="flex:1;padding:12px 4px;background:rgba(63,185,80,0.15);color:var(--green);border:1px solid var(--green);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;line-height:1.4">📅 Googleへ<br><span style="font-size:10px">全'+de.length+'件順番に</span></button>';
+    } else {
+      G('mFoot').style.display='none';
+    }
+    G('mOv').classList.remove('hidden');
+  });
+}
+
+window.delEv = function(id){
+  evs=evs.filter(function(e){return e.id!==id;});
+  saveEvs(); renderCal(); closeMod();
+  toast('削除しました','ok');
+};
+window.closeMod = function(){
+  safeRun(function(){
+    G('mOv').classList.add('hidden');
+    G('mFoot').style.display='';
+    curEvId=null;
+  });
+};
+window.delCurEv = function(){
+  if(!curEvId) return;
+  evs=evs.filter(function(e){return e.id!==curEvId;});
+  saveEvs(); renderCal(); closeMod();
+  toast('削除しました','ok');
+};
+
+// ===== タブ =====
+var PANES=['tabScan','tabCal','tabSettings'];
+window.sw = function(i){
+  PANES.forEach(function(id,j){
+    var p=G(id); if(p) p.classList.toggle('hidden',j!==i);
+    var b=G('tBtn'+j); if(b) b.classList.toggle('active',j===i);
+  });
+  if(i===1) safeRun(renderCal);
+};
+
+// ===== ICS出力 =====
+function makeIcsEvent(ev){
+  var dt=ev.datetime||'';
+  var lbl=ev.type==='load'?'🟢 積み込み':'🔴 荷下ろし';
+  var loc=(ev.location||'').replace(/,/g,'\\,').replace(/\n/g,'\\n');
+  var uid=ev.id+'@haisha';
+  var now=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+/,'');
+  var pad=function(n){return ('0'+n).slice(-2);};
+  var dtstart,dtend;
+  if(dt.indexOf('T')>=0){
+    var d=new Date(dt);
+    var local=d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'T'+pad(d.getHours())+pad(d.getMinutes())+'00';
+    var de2=new Date(d.getTime()+3600000);
+    var localE=de2.getFullYear()+pad(de2.getMonth()+1)+pad(de2.getDate())+'T'+pad(de2.getHours())+pad(de2.getMinutes())+'00';
+    dtstart='DTSTART;TZID=Asia/Tokyo:'+local;
+    dtend  ='DTEND;TZID=Asia/Tokyo:'+localE;
+  } else {
+    var base=dt.replace(/ AM| PM/,'');
+    var d2=new Date(base);
+    var ymd=d2.getFullYear()+pad(d2.getMonth()+1)+pad(d2.getDate());
+    if(dt.indexOf(' AM')>=0){ dtstart='DTSTART;TZID=Asia/Tokyo:'+ymd+'T090000'; dtend='DTEND;TZID=Asia/Tokyo:'+ymd+'T120000'; }
+    else if(dt.indexOf(' PM')>=0){ dtstart='DTSTART;TZID=Asia/Tokyo:'+ymd+'T130000'; dtend='DTEND;TZID=Asia/Tokyo:'+ymd+'T170000'; }
+    else{ var nx=new Date(d2.getTime()+86400000); var ymdN=nx.getFullYear()+pad(nx.getMonth()+1)+pad(nx.getDate()); dtstart='DTSTART;VALUE=DATE:'+ymd; dtend='DTEND;VALUE=DATE:'+ymdN; }
+  }
+  return ['BEGIN:VEVENT','UID:'+uid,'DTSTAMP:'+now+'Z',dtstart,dtend,'SUMMARY:'+lbl+(ev.location?' / '+ev.location.slice(0,20):''),'DESCRIPTION:'+lbl+'\\n場所: '+(ev.location||'未設定')+'\\n時刻: '+fmtTime(ev),'LOCATION:'+loc,'END:VEVENT'].join('\r\n');
+}
+
+function buildIcs(ids){
+  var targets=Array.isArray(ids)?evs.filter(function(e){return ids.indexOf(e.id)>=0;}):evs.filter(function(e){return e.id===ids;});
+  if(!targets.length) return null;
+  return ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//配車カレンダー//JP','CALSCALE:GREGORIAN','METHOD:PUBLISH','X-WR-TIMEZONE:Asia/Tokyo','BEGIN:VTIMEZONE','TZID:Asia/Tokyo','BEGIN:STANDARD','TZOFFSETFROM:+0900','TZOFFSETTO:+0900','TZNAME:JST','DTSTART:19700101T000000','END:STANDARD','END:VTIMEZONE'].concat(targets.map(makeIcsEvent)).concat(['END:VCALENDAR']).join('\r\n');
+}
+
+function dlIcs(ics,fname){
+  var blob=new Blob([ics],{type:'text/calendar;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a'); a.href=url; a.download=fname;
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1000);
+  toast('📲 カレンダーファイルを開いてください','inf');
+}
+
+window.exportIcs = function(id){
+  var ics=buildIcs(id); if(!ics){ toast('エラー','ng'); return; }
+  var ev=evs.filter(function(e){return e.id===id;})[0];
+  dlIcs(ics,'haisha_'+(ev?ev.datetime||'event':'event').slice(0,10)+'.ics');
+};
+window.exportIcsMulti = function(ids){
+  var ics=buildIcs(ids); if(!ics){ toast('エラー','ng'); return; }
+  dlIcs(ics,'haisha_'+ids.length+'件.ics');
+};
+
+// ===== Google Calendar =====
+function makeGcalUrl(ev){
+  var dt=ev.datetime||'';
+  var lbl=ev.type==='load'?'🟢 積み込み':'🔴 荷下ろし';
+  var title=encodeURIComponent(lbl+(ev.location?' / '+ev.location.slice(0,30):''));
+  var details=encodeURIComponent('種別: '+lbl+'\n場所: '+(ev.location||'未設定')+'\n時刻: '+fmtTime(ev));
+  var loc=encodeURIComponent(ev.location||'');
+  var pad=function(n){return ('0'+n).slice(-2);};
+  var dates;
+  if(dt.indexOf('T')>=0){
+    var d=new Date(dt);
+    var fmt=function(x){return x.getFullYear()+pad(x.getMonth()+1)+pad(x.getDate())+'T'+pad(x.getHours())+pad(x.getMinutes())+'00';};
+    dates=fmt(d)+'/'+fmt(new Date(d.getTime()+3600000));
+  } else {
+    var base=dt.replace(/ AM| PM/,'');
+    var d2=new Date(base);
+    var ymd=d2.getFullYear()+pad(d2.getMonth()+1)+pad(d2.getDate());
+    if(dt.indexOf(' AM')>=0) dates=ymd+'T090000/'+ymd+'T120000';
+    else if(dt.indexOf(' PM')>=0) dates=ymd+'T130000/'+ymd+'T170000';
+    else{ var nx=new Date(d2.getTime()+86400000); dates=ymd+'/'+(nx.getFullYear()+pad(nx.getMonth()+1)+pad(nx.getDate())); }
+  }
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+title+'&dates='+dates+'&details='+details+'&location='+loc+'&ctz=Asia/Tokyo';
+}
+
+window.exportGcal = function(id){
+  safeRun(function(){
+    var ev=evs.filter(function(e){return e.id===id;})[0];
+    if(!ev){ toast('エラー','ng'); return; }
+    var a=document.createElement('a'); a.href=makeGcalUrl(ev); a.target='_blank'; a.rel='noopener';
+    document.body.appendChild(a); a.click(); setTimeout(function(){a.remove();},500);
+    toast('📅 Googleカレンダーを開きました','ok');
+  });
+};
+window.exportGcalMulti = function(ids){
+  safeRun(function(){
+    var targets=evs.filter(function(e){return ids.indexOf(e.id)>=0;});
+    if(!targets.length){ toast('エラー','ng'); return; }
+    if(targets.length>1&&!confirm(targets.length+'件のGoogleカレンダー追加画面を順番に開きます。よろしいですか？')) return;
+    var i=0;
+    function next(){
+      if(i>=targets.length) return;
+      var a=document.createElement('a'); a.href=makeGcalUrl(targets[i]); a.target='_blank'; a.rel='noopener';
+      document.body.appendChild(a); a.click(); setTimeout(function(){a.remove();},500);
+      i++; setTimeout(next,800);
+    }
+    next();
+    toast('📅 Googleカレンダー画面を開きました','ok');
+  });
+};
+
+// ===== 使用回数 =====
+function countUp(){
+  safeRun(function(){
+    var today=new Date().toDateString();
+    var saved=JSON.parse(localStorage.getItem('api_usage')||'{"date":"","count":0}');
+    var count=(saved.date===today?saved.count:0)+1;
+    localStorage.setItem('api_usage',JSON.stringify({date:today,count:count}));
+    updateUsageUI();
+  });
+}
+function updateUsageUI(){
+  safeRun(function(){
+    var today=new Date().toDateString();
+    var saved=JSON.parse(localStorage.getItem('api_usage')||'{"date":"","count":0}');
+    var count=saved.date===today?saved.count:0;
+    var el=G('todayCount'); if(el) el.textContent=count;
+    var bar=G('usageBar');
+    if(bar){ var pct=Math.min(count/1500*100,100); bar.style.width=pct+'%'; bar.style.background=pct>80?'var(--red)':pct>50?'var(--accent)':'var(--green)'; }
+  });
+}
+window.resetCount = function(){
+  safeRun(function(){
+    localStorage.setItem('api_usage',JSON.stringify({date:new Date().toDateString(),count:0}));
+    updateUsageUI(); toast('リセットしました','ok');
+  });
+};
+
+// ===== テスト =====
+window.addTestEvent = function(){
+  safeRun(function(){
+    var today=new Date();
+    var pad=function(n){return ('0'+n).slice(-2);};
+    var ymd=today.getFullYear()+'-'+pad(today.getMonth()+1)+'-'+pad(today.getDate());
+    evs.push({id:Date.now()+'l',type:'load',  datetime:ymd+'T09:00',location:'テスト積み込み先 栃木県○○市'});
+    evs.push({id:Date.now()+'u',type:'unload',datetime:ymd+'T17:00',location:'テスト荷下ろし先 神奈川県○○市'});
+    saveEvs(); renderCal();
+    toast('✅ 今日にテストイベントを追加しました','ok');
+    sw(1);
+  });
+};
+
+// ===== 全削除 =====
+window.deleteAll = function(){
+  if(!confirm('全データを削除しますか？')) return;
+  evs=[]; saveEvs(); renderCal(); toast('削除しました','ok');
+};
+
+// ===== 起動 =====
+loadEvs();
+// ServiceWorker（1秒遅延・完全非同期）
+setTimeout(function(){
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  }
+},1000);
+// キー保存済みならすぐメイン画面へ
+var _key=localStorage.getItem('gemini_key');
+if(_key){
+  showMain();
+} else {
+  // Enterキー対応
+  var _si=G('setupKey');
+  if(_si) _si.addEventListener('keydown',function(e){ if(e.key==='Enter') window.startApp(); });
+}
+
+})(); // IIFE終了
+</script>
+</body>
+</html>
